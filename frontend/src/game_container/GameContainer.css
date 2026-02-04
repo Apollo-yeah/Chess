@@ -1,0 +1,41 @@
+.game-container {
+  max-width: 1600px;
+  max-height: 1600px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.game-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.game-controls h2 {
+  margin: 0;
+  color: #333;
+}
+
+.reset-btn {
+  padding: 0.5rem 1.5rem;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.reset-btn:hover {
+  background-color: #c82333;
+}
+
+@media (max-width: 768px) {
+  .game-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

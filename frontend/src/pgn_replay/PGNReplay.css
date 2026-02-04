@@ -1,0 +1,165 @@
+/* 全局样式 */
+.pgn-replay-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: "Microsoft YaHei", Arial, sans-serif;
+  color: #333;
+}
+
+.page-title {
+  text-align: center;
+  color: #2196F3;
+  margin-bottom: 30px;
+  margin-left: 20px;
+}
+
+.section-title {
+  color: #4CAF50;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 8px;
+  margin: 20px 0 15px;
+}
+
+/* PGN输入区域 */
+.pgn-input-section .pgn-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  resize: vertical;
+  font-size: 14px;
+}
+
+.pgn-input-buttons {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+
+/* 按钮通用样式 */
+.btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn:disabled {
+  background-color: #cccccc !important;
+  cursor: not-allowed;
+}
+
+.primary-btn {
+  background-color: #2196F3;
+  color: white;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background-color: #1976D2;
+}
+
+.secondary-btn {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  background-color: #e0e0e0;
+}
+
+.success-btn {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.success-btn:hover:not(:disabled) {
+  background-color: #388E3C;
+}
+
+/* 提示框 */
+.hint {
+  padding: 10px 15px;
+  margin: 15px 0;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.hint-info {
+  background-color: #e3f2fd;
+  color: #0d47a1;
+}
+
+.hint-warning {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.hint-error {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+/* 复盘控制区域 */
+.replay-controls .control-buttons {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+
+.step-info {
+  width: 300px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #555;
+}
+
+.board-wrapper {
+  display: flex;
+  align-items: flex-start; /* 顶部对齐 */
+}
+
+
+.piece-image {
+  width: 50px;
+  height: 50px;
+  pointer-events: none;
+}
+
+.container-host-parent {
+  display: flex;
+  flex-direction: row;
+}
+
+/* 走棋记录列表 */
+.moves-list-section .moves-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  margin-left: 20px;
+}
+
+.move-item {
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.move-item.active {
+  background-color: #2196F3;
+  color: white;
+  font-weight: bold;
+}
+
+.move-item:hover:not(.active) {
+  background-color: #e0e0e0;
+}

@@ -1,0 +1,315 @@
+/* 基础容器样式 */
+.game-status-widget {
+  max-width: 1800px; /* 加宽容器，适配水平布局 */
+  margin: 1rem auto;
+  padding: 1rem;
+  background-color: #f9f9f9;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.widget-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.header-right {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.game-id {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.connection-status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.connection-status.connecting {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.connection-status.connected {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.connection-status.disconnected,
+.connection-status.error {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* 核心修改：水平排列的内容区域 */
+.widget-content {
+  display: flex;
+  flex-direction: row; /* 改为水平排列 */
+  gap: 1rem;
+  height: 360px; /* 固定高度，避免过高 */
+}
+
+/* 左侧区域：基础信息 + 当前分析（垂直排列） */
+.content-left {
+  width: 35%; /* 左侧占35%宽度 */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* 右侧区域：K线图（占65%宽度） */
+.content-right {
+  width: 65%; /* 右侧占65%宽度 */
+}
+
+/* 通用板块样式 */
+.status-section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  height: 100%; /* 填满父容器高度 */
+  display: flex;
+  flex-direction: column;
+}
+
+.status-section h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: #333;
+  font-weight: 600;
+}
+
+/* 基础信息板块 */
+.basic-info {
+  flex: 1; /* 平分左侧高度 */
+}
+
+.basic-info .info-grid {
+  display: grid;
+  grid-template-columns: 1fr; /* 垂直排列，节省宽度 */
+  gap: 0.75rem;
+}
+
+.info-item {
+  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column; /* 标签和值垂直排列，适配窄宽度 */
+}
+
+.info-item .label {
+  color: #666;
+  font-size: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.info-item .value {
+  color: #333;
+  font-weight: 500;
+}
+
+.info-item .value.white {
+  color: #66ccff;
+}
+
+.info-item .value.black {
+  color: #333;
+}
+
+/* 分析板块 */
+.analysis {
+  flex: 1; /* 平分左侧高度 */
+}
+
+.analysis-loading,
+.analysis-error {
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #666;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-error {
+  color: #dc3545;
+}
+
+.analysis-content {
+  margin-top: 0.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.advantage-item {
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.best-moves {
+  display: grid;
+  grid-template-columns: 1fr; /* 垂直排列 */
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.best-move-item {
+  padding: 0.5rem;
+  background: #f5f5f5;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.best-move-item.current .highlight {
+  color: #007bff;
+  font-weight: 600;
+}
+
+/* K线图板块 */
+.advantage-chart {
+  height: 100%;
+}
+
+.chart-container {
+  width: 100%;
+  height: 100%; /* 填满右侧高度 */
+  position: relative;
+  flex: 1;
+}
+
+.chart-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #999;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* 底部区域 */
+.widget-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #eee;
+}
+
+.update-time {
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.refresh-btn {
+  padding: 0.25rem 0.75rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.refresh-btn:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+/* 加载/错误状态 */
+.loading-container,
+.error-container {
+  padding: 2rem;
+  text-align: center;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-text {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.debug-info {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.error-text {
+  font-size: 0.875rem;
+  color: #dc3545;
+  margin-bottom: 1rem;
+}
+
+.retry-btn {
+  padding: 0.5rem 1rem;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+/* 响应式适配：小屏幕自动切回垂直排列 */
+@media (max-width: 1024px) {
+  .widget-content {
+    flex-direction: column;
+    height: auto; /* 取消固定高度 */
+  }
+  
+  .content-left,
+  .content-right {
+    width: 100%; /* 占满宽度 */
+  }
+  
+  .status-section {
+    height: auto; /* 取消固定高度 */
+  }
+  
+  .chart-container {
+    height: 300px; /* K线图固定高度 */
+  }
+}
+
+@media (max-width: 768px) {
+  .game-status-widget {
+    margin: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .widget-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

@@ -1,0 +1,18 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    volumes:
+      - ./backend/static/react_build:/app/static/react_build  # 把打包结果共享给后端
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8156:8156"
+    volumes:
+      - ./backend/static/react_build:/app/static/react_build  # 挂载前端打包结果
+    depends_on:
+      - frontend

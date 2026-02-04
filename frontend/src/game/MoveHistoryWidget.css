@@ -1,0 +1,99 @@
+.move-history-container {
+  /* 核心调整：增大整体外边距（比原来更大） */
+  margin: 2rem 0; /* 上下间距从默认改为2rem，可根据需要调整 */
+  padding: 1rem;
+  border-radius: 8px;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.move-history-container h3 {
+  color: #333;
+  /* 增大标题底部间距 */
+  margin-bottom: 1rem; /* 从0.625rem改为1rem */
+  font-size: 1.125rem;
+  border-bottom: 0.0625rem solid #eee;
+  /* 增大标题底部内边距 */
+  padding-bottom: 0.75rem; /* 从0.5rem改为0.75rem */
+  
+  @media (max-width: 480px) {
+    font-size: 1rem;
+    margin-bottom: 0.625rem; /* 从0.3125rem改为0.625rem */
+    padding-bottom: 0.5rem;
+  }
+}
+
+.empty-history {
+  color: #999;
+  text-align: center;
+  /* 增大空状态内边距 */
+  padding: 2rem; /* 从1.25rem改为2rem */
+  font-size: 0.875rem;
+  
+  @media (max-width: 480px) {
+    padding: 1rem; /* 从0.625rem改为1rem */
+    font-size: 0.75rem;
+  }
+}
+
+.move-history-list {
+  overflow-y: auto;
+  flex: 1;
+  /* 新增：列表内边距，增大间距 */
+  padding: 0.5rem 0;
+}
+
+/* 新增：走棋项样式，增大项间距 */
+.move-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0.5rem; /* 增大内边距 */
+  margin-bottom: 0.5rem; /* 新增：项之间的下边距 */
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 0.875rem;
+}
+
+.move-item:last-child {
+  margin-bottom: 0; /* 最后一项去掉下边距 */
+}
+
+.move-text {
+  flex: 1;
+}
+
+.move-time {
+  color: #999;
+  font-size: 0.75rem;
+  margin-left: 1rem; /* 增大时间戳与文本的间距 */
+}
+
+/* 黑白棋样式区分（可选，增强视觉效果） */
+.move-item.white {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.move-item.black {
+  background-color: rgba(245, 245, 245, 0.8);
+}
+
+.move-item.ai {
+  font-style: italic;
+  color: #666;
+}
+
+/* 响应式调整 */
+@media (max-width: 480px) {
+  .move-item {
+    padding: 0.5rem 0.25rem;
+    font-size: 0.75rem;
+  }
+  
+  .move-time {
+    font-size: 0.6875rem;
+    margin-left: 0.5rem;
+  }
+}

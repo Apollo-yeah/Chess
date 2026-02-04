@@ -1,0 +1,14 @@
+{
+  "files": {
+    "main.css": "/static/css/main.09766f16.css",
+    "main.js": "/static/js/main.c4c6c949.js",
+    "static/media/white-queen.png": "/static/media/white-queen.4a8e9cd21180478914ca.png",
+    "index.html": "/index.html",
+    "main.09766f16.css.map": "/static/css/main.09766f16.css.map",
+    "main.c4c6c949.js.map": "/static/js/main.c4c6c949.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.09766f16.css",
+    "static/js/main.c4c6c949.js"
+  ]
+}

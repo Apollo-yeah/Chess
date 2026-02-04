@@ -1,0 +1,47 @@
+####################################
+# Python
+####################################
+backend/__pycache__/
+backend/*.py[cod]
+backend/.Python
+backend/venv/
+backend/.venv/
+backend/env/
+backend/.env
+# Local Data Files
+backend/game_data/
+# Local Data Files
+backend/game_pgn/
+
+####################################
+# Node / React
+####################################
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+####################################
+# Build artifacts
+####################################
+frontend/build/
+dist/
+build/
+
+####################################
+# OS
+####################################
+.DS_Store
+Thumbs.db
+
+####################################
+# IDE / Editor
+####################################
+.idea/
+.vscode/
+*.iml
+
+####################################
+# Logs
+####################################
+*.log
