@@ -2,7 +2,7 @@ import os
 
 # 配置 Stockfish 路径
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STOCKFISH_PATH = os.path.join(BASE_DIR, "stockfish-macos-m1-apple-silicon")
+STOCKFISH_PATH = os.path.join(BASE_DIR, "stockfish/stockfish-macos-m1-apple-silicon")
 
 # 服务器配置
 SERVER_HOST = '0.0.0.0'

@@ -12,6 +12,7 @@ backend/.env
 backend/game_data/
 # Local Data Files
 backend/game_pgn/
+backend/stockfish/
 
 ####################################
 # Node / React
