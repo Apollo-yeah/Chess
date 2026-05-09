@@ -5,6 +5,13 @@
 | Frontend | React.JS                                             |
 | Backend  | Python Tornado                                       |
 
+# Tech Architecture
+- Drew by ProcessOn
+![Tech Architecture](./image/chess-tech-structure-img.png)
+
+- Drew by ChatGPT with ProcessOn Image
+![Tech Architecture Comic](./image/chess-tech-structure-img-comic.png)
+
 # Backend
 Code by Python Tornado Web, most code is written by ChatGPT and Github Copilot. 
 
