@@ -13,10 +13,10 @@
 ![Tech Architecture Comic](./image/chess-tech-structure-img-comic.png)
 
 # Backend
-Code by Python Tornado Web, most code is written by ChatGPT and Github Copilot. 
+Code by Python Tornado Web, most code is written by Codex with GPT-5.4 and Github Copilot. 
 
 # Frontend
-Code by React.js, most code is written by ChatGPT and Github Copilot. 
+Code by React.js, most code is written by Codex with GPT-5.4 and Github Copilot. 
 
 # Chess Engine
 Supported By [Stockfish](https://stockfishchess.org/), a open-source engine.
@@ -30,3 +30,13 @@ STOCKFISH_PATH = os.path.join(BASE_DIR, "stockfish/stockfish-macos-m1-apple-sili
 Create a folder named 'stockfish' and take the stockfish engineer into this folder!
 
 If you use Windows or Linux, you can visit the offical to download the suitable version and change it.
+
+# SAMPLE IMAGE
+- Chess Game
+![Chess Game](./image/chess-game-img.png)
+
+- Chess Flight Charts
+![Chess Flight Charts](./image/chess-game-flight-charts.png)
+
+- Chess PGN Replay
+![Chess PGN Replay](./image/chess-game-pgn-replay.png)
