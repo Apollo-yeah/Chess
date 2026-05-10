@@ -1,9 +1,9 @@
 # Tech Scaffold
-| Type     | Tech                                                 |
-|----------|------------------------------------------------------|
-| Engine   | [Stockfish](https://zh.wikipedia.org/wiki/Stockfish) |
-| Frontend | React.JS                                             |
-| Backend  | Python Tornado                                       |
+| Type      | Tech                                                 |
+|-----------|------------------------------------------------------|
+| AI Engine | [Stockfish](https://zh.wikipedia.org/wiki/Stockfish) |
+| Frontend  | React.JS                                             |
+| Backend   | Python Tornado                                       |
 
 # Tech Architecture
 - Drew by ProcessOn
@@ -40,3 +40,9 @@ If you use Windows or Linux, you can visit the offical to download the suitable 
 
 - Chess PGN Replay
 ![Chess PGN Replay](./image/chess-game-pgn-replay.png)
+
+# How to start this Project?
+- with the [npm file](./package.json), you can easily use the command `npm run start` if you have the node environment!
+
+# More Details
+You can review the [Page](https://dipengxu.life/toy/chess.html)
