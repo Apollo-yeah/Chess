@@ -1,31 +1,28 @@
 ####################################
 # Python
 ####################################
-backend/__pycache__/
-backend/*.py[cod]
-backend/.Python
-backend/venv/
-backend/.venv/
-backend/env/
-backend/.env
-# Local Data Files
-backend/game_data/
-# Local Data Files
-backend/game_pgn/
-backend/stockfish/
+app/__pycache__/
+app/**/__pycache__/
+app/*.py[cod]
+app/venv/
+app/.venv/
+app/.env
+app/game_data/
+app/game_pgn/
+app/stockfish/
+app/static/dist/
 
 ####################################
-# Node / React
+# Node / Web
 ####################################
-frontend/node_modules/
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
+node_modules/
+web/node_modules/
+npm-debug.log*
 
 ####################################
-# Build artifacts
+# Build artifacts (legacy)
 ####################################
-frontend/build/
+web/build/
 dist/
 build/
 
@@ -48,19 +45,11 @@ Thumbs.db
 *.log
 
 ####################################
-# npm environment files
-node_modules/
-package-lock.json
-####################################
-
-####################################
-# PGN Files
-a_chess_data/*
+# PGN / local data
 game_data/*
 game_pgn/*
-####################################
+a_chess_data/*
 
 ####################################
-# Docker File
+# Docker
 z_chess.tar
-####################################

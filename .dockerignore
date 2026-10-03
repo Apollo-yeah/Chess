@@ -1,48 +1,20 @@
-####################################
-# Git
-####################################
 .git
 .gitignore
 
-####################################
-# Python
-####################################
 **/__pycache__
 **/*.pyc
-**/*.pyo
-**/*.pyd
-backend/venv
-backend/.venv
+app/venv
+app/.venv
+app/game_data
+app/game_pgn
+app/stockfish
 
-####################################
-# Node
-####################################
-frontend/node_modules
-frontend/.env
-frontend/.env.local
-frontend/.env.development.local
-frontend/.env.test.local
-frontend/.env.production.local
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
-frontend/.pnpm-debug.log*
-frontend/coverage
-frontend/build
+node_modules
+web/node_modules
+npm-debug.log*
 
-####################################
-# IDE
-####################################
 .idea
 .vscode
-
-####################################
-# OS
-####################################
 .DS_Store
 
-####################################
-# Tests / Docs
-####################################
-tests
-docs
+app/static/dist
