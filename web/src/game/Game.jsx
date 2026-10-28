@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import './Game.css';
 import MoveHistoryWidget from './MoveHistoryWidget.jsx';
 
@@ -514,6 +515,15 @@ function Game() {
         </div>
 
         <ThemeSwitcher />
+
+        <div className="toolbar-group">
+          <span className="toolbar-group__label">其他页面</span>
+          <div className="toolbar-group__buttons">
+            <Link to="/flight-charts" className="btn btn--ghost">实时分析</Link>
+            <Link to="/pgn-replay" className="btn btn--ghost">棋谱回放</Link>
+            <Link to="/status" className="btn btn--ghost">服务状态</Link>
+          </div>
+        </div>
 
         {gameMode === 'ai' && (
           <div className="toolbar-group">

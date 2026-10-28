@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Chess } from 'chess.js';
 
@@ -183,6 +184,7 @@ const PGNReplay = () => {
 
   return (
     <div className="pgn-replay-container">
+      <Link to="/" className="page-back">← 返回对弈</Link>
       <h1 className="page-title">国际象棋 PGN 复盘工具</h1>
 
       <div className='container-host-parent'>

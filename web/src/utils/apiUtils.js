@@ -65,3 +65,4 @@ export const cancelAnalysisJob = (jobId) => request('delete', `/api/analysis/job
 
 // --- 运维 ---
 export const fetchHealth = () => request('get', '/api/health');
+export const fetchServerStatus = () => request('get', '/api/status');

@@ -86,6 +86,23 @@ async def section_health() -> None:
     check("整体状态 ok", health.get("status") == "ok", str(health.get("status")))
     print(f"       engine: {engine.get('path')} · 池大小 {engine.get('pool_size')}")
 
+    code, status = await api("GET", "/api/status")
+    verdict = (status.get("verdict") or {}).get("level")
+    check("GET /api/status → 200", code == 200, f"code={code}")
+    check(
+        "状态页给出稳定/留意/不稳定",
+        verdict in {"stable", "watch", "unstable"},
+        str(status.get("verdict")),
+    )
+    check(
+        "包含主机、Nginx 与应用指标",
+        isinstance(status.get("host"), dict)
+        and isinstance(status.get("nginx"), dict)
+        and isinstance(status.get("app"), dict)
+        and isinstance(status.get("checks"), list)
+        and len(status.get("checks") or []) > 0,
+    )
+
 
 async def section_isolation() -> tuple[str, str]:
     print("\n[2] 多对局隔离")

@@ -26,6 +26,7 @@ services:
       ENGINE_THREADS: "1"
       CHESS_DATA_DIR: "/app/app/game_data"
       CHESS_PGN_DIR: "/app/app/game_pgn"
+      NGINX_STATUS_URL: "http://web:8157/nginx_status"
     volumes:
       # 对局与棋谱持久化：容器重建后数据仍在
       - ./app/game_data:/app/app/game_data

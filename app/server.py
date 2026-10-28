@@ -38,6 +38,7 @@ from app.handlers.game_handlers import (
     GameUndoHandler,
     GamesHandler,
 )
+from app.handlers.status_handler import StatusHandler
 from app.handlers.websocket_handlers import GameWebSocketHandler
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ GAME_ID_PATTERN = r"(?P<game_id>[0-9a-zA-Z\-]{1,64})"
 ROUTES = [
     # --- 系统 ---
     (r"/api/health", HealthHandler),
+    (r"/api/status", StatusHandler),
     # --- 对局 ---
     (r"/api/games", GamesHandler),
     # 必须写在 /api/games/{game_id} 之前，否则 "current" 会被当成 game_id

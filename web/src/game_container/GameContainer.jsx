@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import GameStatusWidget from './GameStatusWidget';
 import { resetGameToServer } from '../utils/apiUtils.js';
 import { saveGameId, ensureSessionGame } from '../utils/gameSession.js';
@@ -29,7 +30,10 @@ const GameContainer = () => {
   return (
     <div className="game-container">
       <div className="game-controls">
-        <h2>棋局对战</h2>
+        <div>
+          <Link to="/" className="page-back">← 返回对弈</Link>
+          <h2>棋局对战</h2>
+        </div>
         <button onClick={handleGameReset} className="reset-btn" disabled={busy}>
           {busy ? '重置中…' : '🔄 重置游戏'}
         </button>

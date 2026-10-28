@@ -246,6 +246,10 @@
 }
 
 /* ── Buttons ── */
+.game-page a.btn {
+  text-decoration: none;
+}
+
 .game-page .btn {
   display: inline-flex;
   align-items: center;

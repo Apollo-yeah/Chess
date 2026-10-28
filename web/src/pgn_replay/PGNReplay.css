@@ -7,6 +7,18 @@
   color: #333;
 }
 
+.page-back {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  color: #8ab4ff;
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.page-back:hover {
+  text-decoration: underline;
+}
+
 .page-title {
   text-align: center;
   color: #2196F3;

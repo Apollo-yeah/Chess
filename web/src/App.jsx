@@ -3,6 +3,7 @@ import Game from './game/Game.jsx';
 import './App.css'
 import GameContainer from './game_container/GameContainer.jsx';
 import PGNReplay from './pgn_replay/PGNReplay.jsx';
+import StatusPage from './status/StatusPage.jsx';
 import { PieceThemeProvider } from './pieces/PieceThemeContext.jsx';
 
 function App() {
@@ -20,6 +21,9 @@ function App() {
 
           {/* 棋谱演变板块 */}
           <Route path='/pgn-replay' element={<PGNReplay/>} />
+
+          {/* 服务状态 */}
+          <Route path="/status" element={<StatusPage />} />
 
         </Routes>
 

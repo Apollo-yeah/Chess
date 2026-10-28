@@ -96,4 +96,22 @@ http {
             proxy_buffering       off;
         }
     }
+
+    # 只监听回环地址，供本机 /api/status 读取连接数，不对局域网开放。
+    server {
+        listen 127.0.0.1:8157;
+        server_name _;
+        access_log off;
+
+        location = /nginx_status {
+            stub_status;
+            allow 127.0.0.1;
+            allow ::1;
+            deny all;
+        }
+
+        location / {
+            return 404;
+        }
+    }
 }
