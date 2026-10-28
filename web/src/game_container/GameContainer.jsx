@@ -1,37 +1,42 @@
-import React, { useRef } from 'react';
+import { useRef, useState } from 'react';
 import GameStatusWidget from './GameStatusWidget';
+import { resetGameToServer } from '../utils/apiUtils.js';
+import { loadGameId, saveGameId, ensureSessionGame } from '../utils/gameSession.js';
 import './GameContainer.css';
 
+/** 实时分析板块：订阅当前浏览器会话所属的对局 */
 const GameContainer = () => {
-  // 创建ref指向分析组件，用于调用重置方法
   const gameStatusRef = useRef(null);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  // 重置游戏的核心方法
-  const handleGameReset = () => {
-    // 1. 调用你的游戏重置逻辑（比如清空棋盘、通知后端重置等）
-    console.log('触发游戏重置');
-    // 示例：这里可以添加调用后端重置接口的代码
-    // fetch(`${API_BASE_URL}/reset-game`, { method: 'POST' })
-    //   .then(res => res.json())
-    //   .then(data => console.log('后端重置成功:', data))
-    //   .catch(err => console.error('后端重置失败:', err));
-
-    // 2. 调用分析组件的重置方法，清空历史数据
-    if (gameStatusRef.current) {
-      gameStatusRef.current.resetGameData();
-      alert('游戏已重置，分析数据已清空！');
+  const handleGameReset = async () => {
+    setBusy(true);
+    setNotice('');
+    try {
+      const gameId = loadGameId() || (await ensureSessionGame()).game_id;
+      const data = await resetGameToServer(gameId);
+      saveGameId(data.game_id);
+      // 分析数据清空并在组件内重连以订阅新对局
+      if (gameStatusRef.current) gameStatusRef.current.resetGameData();
+      setNotice(`已重置，新对局 ${String(data.game_id).slice(0, 8)}（刷新页面即可订阅新局）`);
+    } catch (err) {
+      setNotice(`重置失败：${err.message}`);
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
     <div className="game-container">
-      {/* 游戏控制区 */}
       <div className="game-controls">
         <h2>棋局对战</h2>
-        <button onClick={handleGameReset} className="reset-btn">🔄 重置游戏</button>
+        <button onClick={handleGameReset} className="reset-btn" disabled={busy}>
+          {busy ? '重置中…' : '🔄 重置游戏'}
+        </button>
+        {notice && <p className="reset-notice">{notice}</p>}
       </div>
 
-      {/* 实时分析模块（绑定ref） */}
       <GameStatusWidget ref={gameStatusRef} />
     </div>
   );

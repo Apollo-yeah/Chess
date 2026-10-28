@@ -1,20 +1,37 @@
-.git
-.gitignore
+# 构建上下文裁剪 —— 只排除确定不需要的东西。
+# 必须保留：package.json / package-lock.json / scripts/ / web/(index.html,vite.config.js,src,public)
+#           requirements.txt / app/**(Python 源码) / deploy/
 
-**/__pycache__
-**/*.pyc
-app/venv
-app/.venv
-app/game_data
-app/game_pgn
-app/stockfish
-
+# 依赖与构建产物（镜像内重新安装、重新构建）
 node_modules
 web/node_modules
-npm-debug.log*
+web/dist
+app/static/dist
 
+# 引擎二进制：app/stockfish/ 是 macOS arm64 版本，Linux 镜像不可用
+# （api 镜像改为 apt 安装发行版 stockfish）
+app/stockfish
+
+# 真实用户数据（由 compose volume 挂载，不进镜像）
+app/game_data
+app/game_pgn
+
+# Python 缓存
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# 版本控制 / 编辑器 / 系统文件
+.git
+.gitignore
 .idea
 .vscode
 .DS_Store
 
-app/static/dist
+# 与本镜像无关的归档与历史目录
+z_chess.tar
+image/
+a_chess_data/
+game_data/
+game_pgn/

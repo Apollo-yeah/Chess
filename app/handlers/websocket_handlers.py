@@ -1,163 +1,192 @@
+"""对局 WebSocket：按 ``game_id`` 订阅，两段式推送（状态 → 分析）。
+
+客户端消息协议::
+
+    {"action": "refresh"}                   重新推送当前局状态
+    {"action": "subscribe", "game_id": "x"}  切换订阅另一局
+    {"action": "ping"}                       心跳
+
+服务端消息协议::
+
+    {"type": "hello",           "game_id", "adopted", "status"}
+    {"type": "status_update",   "status", "version"}
+    {"type": "analysis_update", "analysis", "version", "fen"}
+    {"type": "error",           "message"}
+    {"type": "pong"}
+"""
+
 import json
-import datetime
+import logging
+import urllib.parse
+
 import tornado.websocket
-from app.utils import websocket_clients, global_state, get_game_result, get_game_statistics
-import chess.engine
-from app.config import STOCKFISH_PATH
+
+from app.config import CORS_ORIGINS
+from app.game.hub import get_hub
+from app.game.service import GameError, get_service
+
+logger = logging.getLogger(__name__)
+
 
 class GameWebSocketHandler(tornado.websocket.WebSocketHandler):
-    def check_origin(self, origin):
-        return True
-    
-    def set_default_headers(self):
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        self.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, WEBSOCKET")
+    game_id: str = ""
 
-    def open(self):
-        """新客户端连接 - 增加异常捕获"""
-        try:
-            print(f"WebSocket 客户端已连接: {self.request.remote_ip}")
-            websocket_clients.add(self)
-            # 立即推送一次完整数据（异步执行，避免阻塞）
-            tornado.ioloop.IOLoop.current().add_callback(self.send_full_update)
-        except Exception as e:
-            print(f"WebSocket连接初始化失败: {e}")
-            self.close()
+    # --- 安全 ---
+    def _forwarded_hosts(self) -> set[str]:
+        """反代可能改写 Host（例如 Nginx 的 ``$host`` 会丢掉端口），因此两个头都看。"""
+        hosts: set[str] = set()
+        for header in ("X-Forwarded-Host", "Host"):
+            value = self.request.headers.get(header)
+            if value:
+                hosts.add(value.split(",")[0].strip().lower())
+        return hosts
 
-    def on_close(self):
-        """客户端断开连接 - 安全移除"""
-        print(f"WebSocket 客户端已断开: {self.request.remote_ip}")
-        if self in websocket_clients:
+    def check_origin(self, origin: str) -> bool:
+        """只接受同源连接（或显式白名单），替代旧的 ``return True``。
+
+        防御目标是跨站 WebSocket 劫持（其它站点借用浏览器发起连接）。
+        比分两条：
+        1. Origin 的 ``host:port`` 与反向代理转发的主机完全一致 → 通过；
+        2. 否则退化为**主机名**比较（忽略端口）——因为反代常把端口丢掉
+           （``proxy_set_header Host $host``），而端口差异并不构成跨站威胁。
+        """
+        if not origin:
+            return True  # 非浏览器客户端（无 Origin），不受 CSRF 影响
+        if "*" in CORS_ORIGINS or origin in CORS_ORIGINS:
+            return True
+
+        parsed = urllib.parse.urlparse(origin)
+        netloc = (parsed.netloc or "").lower()
+        hostname = (parsed.hostname or "").lower()
+        if not hostname:
+            return False
+
+        expected = self._forwarded_hosts()
+        if netloc and netloc in expected:
+            return True
+
+        expected_hostnames = set()
+        for entry in expected:
+            name = urllib.parse.urlparse(f"//{entry}").hostname
+            if name:
+                expected_hostnames.add(name.lower())
+        return hostname in expected_hostnames
+
+    # 注意：不要覆盖 ``get()`` —— Tornado 正是在该方法里完成 WebSocket 握手，
+    # 覆盖它会让所有连接握手失败（非 WebSocket 请求的 400 由 Tornado 默认处理）。
+
+    # --- 生命周期 ---
+    async def open(self, *args, **kwargs) -> None:
+        requested = self.get_query_argument("game_id", None)
+        service = get_service()
+        hub = get_hub()
+        self.game_id = ""
+
+        state = None
+        if requested:
             try:
-                websocket_clients.remove(self)
-            except:
-                pass
+                state = await service.require(requested)
+            except GameError:
+                state = None
 
-    def on_message(self, message):
-        """处理客户端消息 - 增加异常捕获"""
+        adopted = False
+        if state is None:
+            # 未指定或指定了不存在的对局：在内存中开一局（首次落子才写盘）
+            try:
+                state = await service.create(persist=False)
+                adopted = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("WebSocket 初始化对局失败：%s", exc)
+                self.close(1011, "服务器无法初始化对局")
+                return
+
+        self.game_id = state.game_id
+        hub.subscribe(state.game_id, self)
+        self.write_message(
+            {
+                "type": "hello",
+                "game_id": state.game_id,
+                "adopted": adopted,
+                "status": state.snapshot(),
+                "version": state.version,
+            }
+        )
+        hub.schedule_analysis(state.game_id)
+
+    def on_close(self) -> None:
+        get_hub().unsubscribe_handler(self)
+
+    async def on_message(self, message: str) -> None:
         try:
             data = json.loads(message)
-            if data.get("action") == "refresh":
-                self.send_full_update()
         except json.JSONDecodeError:
-            print(f"WebSocket消息解析失败: 非JSON格式 - {message}")
-        except Exception as e:
-            print(f"处理WebSocket消息失败: {e}")
+            self.write_message({"type": "error", "message": "消息必须是 JSON"})
+            return
+        if not isinstance(data, dict):
+            self.write_message({"type": "error", "message": "消息必须是 JSON 对象"})
+            return
 
-    def send_full_update(self):
-        """发送完整数据 - 彻底修复序列化+异常处理"""
+        action = data.get("action")
+        hub = get_hub()
+        service = get_service()
+
+        if action == "ping":
+            self.write_message({"type": "pong"})
+            return
+
+        if action == "subscribe":
+            target = (data.get("game_id") or "").strip()
+            if not target:
+                self.write_message({"type": "error", "message": "缺少 game_id"})
+                return
+            try:
+                state = await service.require(target)
+            except GameError as exc:
+                self.write_message({"type": "error", "message": str(exc)})
+                return
+            hub.subscribe(state.game_id, self)
+            self.game_id = state.game_id
+            self.write_message(
+                {
+                    "type": "hello",
+                    "game_id": state.game_id,
+                    "adopted": False,
+                    "status": state.snapshot(),
+                    "version": state.version,
+                }
+            )
+            hub.schedule_analysis(state.game_id)
+            return
+
+        if action in (None, "refresh"):
+            if not self.game_id:
+                self.write_message({"type": "error", "message": "尚未订阅对局"})
+                return
+            try:
+                state = await service.require(self.game_id)
+            except GameError as exc:
+                self.write_message({"type": "error", "message": str(exc)})
+                return
+            self.write_message(
+                {
+                    "type": "status_update",
+                    "status": state.snapshot(),
+                    "version": state.version,
+                }
+            )
+            hub.schedule_analysis(state.game_id)
+            return
+
+        self.write_message({"type": "error", "message": f"未知指令：{action}"})
+
+    # --- 错误 ---
+    def write_message(self, message, binary: bool = False) -> None:  # type: ignore[override]
+        """推送失败（连接已断开）时不再抛异常打断广播。"""
         try:
-            board = global_state["board"]
-            current_game = global_state["current_game"]
-            
-            # 1. 构建状态数据（确保所有数据可序列化）
-            legal_moves = [str(move) for move in board.legal_moves]
-            result = get_game_result(board)
-            current_game["result"] = result
-            
-            status_data = {
-                "board_state": {
-                    "fen": board.fen(),
-                    "legal_moves": legal_moves,
-                    "is_check": board.is_check(),
-                    "is_checkmate": board.is_checkmate(),
-                    "is_stalemate": board.is_stalemate(),
-                    "turn": "white" if board.turn else "black",
-                    "game_result": result
-                },
-                "game_info": {
-                    "game_id": current_game["game_id"],
-                    "start_time": current_game["start_time"],
-                    "mode": current_game["mode"],
-                    "player_color": current_game["player_color"],
-                    "ai_level": current_game["ai_level"],
-                    "result": current_game["result"],
-                    "end_time": current_game["end_time"] or ""
-                },
-                "move_history": current_game["moves"],
-                "statistics": get_game_statistics(current_game["moves"])
-            }
-            
-            # 2. 构建分析数据（单独异常捕获，避免分析失败导致连接断开）
-            analysis_data = {"success": False}
-            try:
-                with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-                    info = engine.analyse(board, chess.engine.Limit(depth=15))
-                    score = info["score"].relative
-                    
-                    if score.is_mate():
-                        mate_in = score.mate()
-                        analysis_data["advantage_score"] = 100 if mate_in > 0 else -100
-                        analysis_data["advantage"] = "white_winning" if mate_in > 0 else "black_winning"
-                    else:
-                        centipawn = score.score() or 0
-                        normalized_score = centipawn / 100
-                        analysis_data["advantage_score"] = round(normalized_score, 1)
-                        
-                        if normalized_score > 5:
-                            analysis_data["advantage"] = "white_advantage"
-                        elif normalized_score < -5:
-                            analysis_data["advantage"] = "black_advantage"
-                        elif normalized_score > 1:
-                            analysis_data["advantage"] = "slight_white_advantage"
-                        elif normalized_score < -1:
-                            analysis_data["advantage"] = "slight_black_advantage"
-                        else:
-                            analysis_data["advantage"] = "equal"
-                    
-                    current_best_move = engine.play(board, chess.engine.Limit(depth=10))
-                    analysis_data["current_best_move"] = str(current_best_move.move)
-                    
-                    if board.turn:
-                        analysis_data["white_best_move"] = str(current_best_move.move)
-                        temp_board = board.copy()
-                        temp_board.push(current_best_move.move)
-                        black_response = engine.play(temp_board, chess.engine.Limit(depth=8))
-                        analysis_data["black_best_move"] = str(black_response.move)
-                    else:
-                        analysis_data["black_best_move"] = str(current_best_move.move)
-                        temp_board = board.copy()
-                        temp_board.push(current_best_move.move)
-                        white_response = engine.play(temp_board, chess.engine.Limit(depth=8))
-                        analysis_data["white_best_move"] = str(white_response.move)
-                    
-                    analysis_data["success"] = True
+            return super().write_message(message, binary)
+        except tornado.websocket.WebSocketClosedError:
+            get_hub().unsubscribe_handler(self)
+            return None
 
-                    # 始终以白色方的优势作为基准点位输出
-                    analysis_score_right = 1 if board.turn else -1
-                    analysis_data["advantage_score"] *= analysis_score_right
-            except Exception as e:
-                analysis_data["error"] = f"分析失败：{str(e)}"
-                analysis_data["success"] = False
-            
-            # 3. 组合数据（修复时间序列化问题）
-            full_data = {
-                "type": "full_update",
-                "status": status_data,
-                "analysis": analysis_data,
-                "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # 修复：用字符串而非JSON对象
-            }
-            
-            # 4. 安全发送（确保数据可序列化）
-            try:
-                self.write_message(json.dumps(full_data, ensure_ascii=False))
-            except json.JSONDecodeError:
-                print("WebSocket数据序列化失败")
-                # 发送简化版数据
-                self.write_message(json.dumps({
-                    "type": "error",
-                    "message": "数据序列化失败"
-                }))
-            except tornado.websocket.WebSocketClosedError:
-                print("WebSocket连接已关闭，跳过发送")
-                
-        except Exception as e:
-            print(f"发送WebSocket数据失败: {e}")
-            try:
-                self.write_message(json.dumps({
-                    "type": "error",
-                    "message": f"服务器错误：{str(e)}"
-                }))
-            except:
-                pass
+
+__all__ = ["GameWebSocketHandler"]

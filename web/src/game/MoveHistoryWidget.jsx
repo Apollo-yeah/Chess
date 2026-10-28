@@ -1,54 +1,39 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import './MoveHistoryWidget.css';
 
-// 格式化走棋文本的工具函数（可根据你的业务逻辑调整）
-const formatMoveText = (move) => {
-  const colorText = move.color === 'white' ? '白棋' : '黑棋';
-  const typeText = move.type === 'ai' ? '(AI)' : '(玩家)';
-  return (
-    <span className="move-text">
-      #{move.move_number} {colorText} {typeText}：{move.move}
-    </span>
-  );
-};
+const COLOR_TEXT = { white: '白棋', black: '黑棋' };
+
+/** 优先展示 SAN 记谱；旧数据没有 SAN 时退回 UCI */
+const formatMoveText = (move) => (
+  <span className="move-text">
+    #{move.move_number} {COLOR_TEXT[move.color] || move.color} {move.type === 'ai' ? '(AI)' : '(玩家)'}：
+    <code>{move.san || move.move}</code>
+  </span>
+);
 
 /**
- * 走棋历史组件
- * @param {Array} moveHistory - 走棋历史数组
- * @param {Object} style - 自定义样式（可选）
- * @returns {JSX.Element}
+ * 走棋历史组件（自动滚动到最新一着）
+ * @param {Array} moveHistory - 服务端返回的 move_history
  */
-const MoveHistoryWidget = ({ moveHistory, style = {} }) => {
-  // 1. 创建列表容器的ref，用于获取DOM元素
+const MoveHistoryWidget = ({ moveHistory = [], style = {} }) => {
   const historyListRef = useRef(null);
 
-  // 2. 监听moveHistory变化，更新后自动滚动到底部
   useEffect(() => {
     if (historyListRef.current) {
-      // 滚动到底部（两种方式兼容所有浏览器）
       historyListRef.current.scrollTop = historyListRef.current.scrollHeight;
-      // 备选方案（更通用）：
-      // historyListRef.current.scrollIntoView({
-      //   behavior: 'smooth', // 平滑滚动（可选）
-      //   block: 'end'
-      // });
     }
-  }, [moveHistory]); // 依赖moveHistory，数组变化时触发
+  }, [moveHistory]);
 
   return (
     <div className="move-history-container" style={style}>
-      <h3>走棋历史</h3>
+      <h3>走棋历史{moveHistory.length > 0 ? `（${moveHistory.length}）` : ''}</h3>
       {moveHistory.length === 0 ? (
         <div className="empty-history">暂无走棋记录</div>
       ) : (
-        // 3. 将ref绑定到滚动列表容器
-        <div 
-          className="move-history-list"
-          ref={historyListRef} // 关键：绑定ref
-        >
+        <div className="move-history-list" ref={historyListRef}>
           {moveHistory.map((move, index) => (
-            <div 
-              key={index} 
+            <div
+              key={`${move.move_number}-${move.move}-${index}`}
               className={`move-item ${move.color} ${move.type}`}
             >
               {formatMoveText(move)}

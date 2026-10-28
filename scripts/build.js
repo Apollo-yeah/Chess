@@ -1,16 +1,11 @@
 #!/usr/bin/env node
-import { execSync } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
+/** 只构建前端 → web/dist（自包含产物，不再写入 app/static/dist） */
+import { buildWeb } from './lib.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+console.log('[build] Building web → web/dist');
 
-console.log('[build] Building web → app/static/dist');
-
-execSync('npx vite build --config web/vite.config.js', {
-  cwd: root,
-  stdio: 'inherit',
+const build = buildWeb();
+build.on('exit', (code) => {
+  console.log(code === 0 ? '[build] Done.' : `[build] Failed (code=${code}).`);
+  process.exit(code ?? 1);
 });
-
-console.log('[build] Done.');

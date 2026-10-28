@@ -1,66 +1,66 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../constants/backend_config.js';
 
-// 获取棋盘状态
-export const fetchBoardState = async () => {
-  try {
-    const res = await axios.get(`${API_BASE_URL}/api/board`);
-    return res.data;
-  } catch (err) {
-    throw new Error('连接后端失败：' + err.message);
-  }
-};
+const client = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+});
 
-// 设置游戏模式
-export const setGameModeToServer = async (gameMode, playerColor, aiLevel) => {
-  try {
-    const res = await axios.post(`${API_BASE_URL}/api/set_mode`, {
-      mode: gameMode,
-      player_color: playerColor,
-      ai_level: aiLevel
-    });
-    return res.data;
-  } catch (err) {
-    throw new Error('设置游戏模式失败：' + err.message);
+/** 把后端 {success:false, error} 与网络异常统一成带可读 message 的 Error */
+function toError(err) {
+  if (err.response) {
+    const payload = err.response.data;
+    const message =
+      (payload && typeof payload === 'object' && payload.error) ||
+      `${err.response.status} ${err.response.statusText}`;
+    const wrapped = new Error(message);
+    wrapped.status = err.response.status;
+    wrapped.payload = payload;
+    return wrapped;
   }
-};
+  if (err.code === 'ECONNABORTED') return new Error('请求超时，请稍后重试');
+  return new Error(`无法连接后端服务：${err.message}`);
+}
 
-// 执行走棋
-export const makeMoveToServer = async (move) => {
+async function request(method, url, data, config = {}) {
   try {
-    const res = await axios.post(`${API_BASE_URL}/api/move`, { move });
-    return res.data;
+    const response = await client.request({ method, url, data, ...config });
+    return response.data;
   } catch (err) {
-    throw new Error('走棋失败：' + err.message);
+    throw toError(err);
   }
-};
+}
 
-// 请求AI走棋
-export const requestAIMoveToServer = async (aiLevel) => {
-  try {
-    const res = await axios.post(`${API_BASE_URL}/api/ai`, { ai_level: aiLevel });
-    return res.data;
-  } catch (err) {
-    throw new Error('AI走棋失败：' + err.message);
-  }
-};
+// --- 对局 ---
+export const fetchHistory = () => request('get', '/api/games');
+export const createGame = (payload = {}) => request('post', '/api/games', payload);
+export const fetchGameState = (gameId) => request('get', `/api/games/${gameId}`);
+export const makeMoveToServer = (gameId, move) =>
+  request('post', `/api/games/${gameId}/move`, { move });
+export const requestAIMoveToServer = (gameId, aiLevel) =>
+  request('post', `/api/games/${gameId}/ai`, { ai_level: aiLevel });
+export const undoMoveToServer = (gameId, plies = 1) =>
+  request('post', `/api/games/${gameId}/undo`, { plies });
+export const setGameModeToServer = (gameId, mode, playerColor, aiLevel) =>
+  request('post', `/api/games/${gameId}/mode`, {
+    mode,
+    player_color: playerColor,
+    ai_level: aiLevel,
+  });
+/** 重置：可同时切换模式/执子颜色（一次调用完成归档旧局 + 开新局） */
+export const resetGameToServer = (gameId, options = {}) =>
+  request('post', `/api/games/${gameId}/reset`, options);
+export const fetchAnalysis = (gameId, depth) =>
+  request('get', `/api/games/${gameId}/analysis`, undefined, {
+    params: depth ? { depth } : undefined,
+  });
 
-// 重置游戏
-export const resetGameToServer = async () => {
-  try {
-    const res = await axios.post(`${API_BASE_URL}/api/reset`);
-    return res.data;
-  } catch (err) {
-    throw new Error('重置游戏失败：' + err.message);
-  }
-};
+// --- 长棋谱分析任务 ---
+export const submitPgnAnalysis = (pgnText, depth) =>
+  request('post', '/api/analysis/jobs', { pgn_text: pgnText, depth });
+export const fetchAnalysisJob = (jobId) => request('get', `/api/analysis/jobs/${jobId}`);
+export const cancelAnalysisJob = (jobId) => request('delete', `/api/analysis/jobs/${jobId}`);
 
-// 悔棋（单步）
-export const undoMoveToServer = async () => {
-  try {
-    const res = await axios.post(`${API_BASE_URL}/api/undo`);
-    return res.data;
-  } catch (err) {
-    throw new Error('悔棋失败：' + err.message);
-  }
-};
+// --- 运维 ---
+export const fetchHealth = () => request('get', '/api/health');

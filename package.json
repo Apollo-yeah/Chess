@@ -1,14 +1,21 @@
 {
   "name": "z-chess",
-  "version": "2.0.0",
-  "description": "Chess AI application — unified React + Tornado monorepo",
+  "version": "3.0.0",
+  "description": "Chess AI application — decoupled React SPA + Tornado API + Stockfish engine pool",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.js",
+    "dev:api": "node scripts/api.js",
+    "dev:web": "vite --config web/vite.config.js",
     "build": "node scripts/build.js",
-    "start": "npm run build && cross-env PYTHONPATH=. python -m app",
-    "start:server": "cross-env PYTHONPATH=. python -m app",
+    "lint": "eslint web/src",
+    "preview": "vite preview --config web/vite.config.js",
+    "start": "node scripts/start.js",
+    "test:smoke": "python3 scripts/smoke_test.py",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
     "install:all": "npm install && pip install -r requirements.txt"
   },
   "dependencies": {
@@ -18,12 +25,13 @@
     "echarts-for-react": "^3.0.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.11.0"
+    "react-router-dom": "^7.11.0",
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
+    "eslint": "^10.0.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "vite": "^6.0.3"
   },

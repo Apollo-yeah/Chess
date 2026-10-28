@@ -1,219 +1,180 @@
-import json
-import uuid
-import tornado.web
-from datetime import datetime
-import chess
-import chess.engine
-from .base_handler import BaseHandler
-from app.config import STOCKFISH_PATH, AI_CONFIG
-from app.utils import (
-    global_state, save_game_data, reset_current_game,
-    broadcast_game_update, get_game_result, get_board_snapshot,
-    list_all_game_ids, load_single_game,
-)
+"""对局相关 REST 接口（全部 async，均为按 game_id 分资源的风格）。"""
 
-class MakeMoveHandler(BaseHandler):
-    """玩家走棋接口"""
-    def post(self):
+import logging
+
+from app.engine.pool import EngineUnavailable
+from app.game.service import GameError, get_service
+from app.handlers.base_handler import BaseHandler
+
+logger = logging.getLogger(__name__)
+
+
+class GamesHandler(BaseHandler):
+    """GET  /api/games      历史对局摘要列表
+    POST /api/games      新建一局对局
+    """
+
+    async def get(self) -> None:
+        service = get_service()
+        games = await service.history()
+        self.write_json({"success": True, "game_count": len(games), "games": games})
+
+    async def post(self) -> None:
+        service = get_service()
+        body = self.read_json_body()
         try:
-            data = json.loads(self.request.body)
-            move_uci = data.get("move")
-            
-            board = global_state["board"]
-            current_game = global_state["current_game"]
-            
-            move_number = len(current_game["moves"]) + 1
-            color = "white" if board.turn else "black"
-            move_info = {
-                "move_number": move_number,
-                "color": color,
-                "move": move_uci,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "type": "human"
+            state = await service.create(
+                mode=body.get("mode", ""),
+                player_color=body.get("player_color", ""),
+                ai_level=body.get("ai_level", "normal"),
+            )
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json(
+            {"success": True, "game_id": state.game_id, **state.snapshot()}, status=201
+        )
+
+
+class GameStateHandler(BaseHandler):
+    """GET /api/games/{game_id} — 单局完整状态"""
+
+    async def get(self, game_id: str) -> None:
+        service = get_service()
+        try:
+            state = await service.require(game_id)
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json({"success": True, **state.snapshot()})
+
+
+class GameMoveHandler(BaseHandler):
+    """POST /api/games/{game_id}/move — 玩家走棋"""
+
+    async def post(self, game_id: str) -> None:
+        body = self.read_json_body()
+        service = get_service()
+        try:
+            state, record = await service.apply_move(game_id, body.get("move", ""))
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json(
+            {"success": True, "move_info": record.to_dict(), **state.snapshot()}
+        )
+
+
+class GameAiMoveHandler(BaseHandler):
+    """POST /api/games/{game_id}/ai — 请求 AI 走棋"""
+
+    async def post(self, game_id: str) -> None:
+        body = self.read_json_body()
+        service = get_service()
+        try:
+            state, record = await service.apply_ai_move(game_id, body.get("ai_level"))
+        except EngineUnavailable as exc:
+            self.write_json(
+                {
+                    "success": False,
+                    "engine_available": False,
+                    "error": f"Stockfish 引擎不可用：{exc}",
+                },
+                status=503,
+            )
+            return
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json(
+            {
+                "success": True,
+                "ai_move": record.move,
+                "ai_level": state.ai_level,
+                "move_info": record.to_dict(),
+                **state.snapshot(),
             }
-            
-            move = chess.Move.from_uci(move_uci)
-            if move in board.legal_moves:
-                board.push(move)
-                current_game["moves"].append(move_info)
-                current_game["result"] = get_game_result(board)
-                save_game_data(current_game)
-                
-                # 广播更新
-                broadcast_game_update()
-                
-                self.write(json.dumps({
-                    "success": True,
-                    "move_info": move_info,
-                    **get_board_snapshot(board, current_game),
-                }))
-            else:
-                self.write(json.dumps({"success": False, "error": "Invalid move"}))
-        except Exception as e:
-            self.write(json.dumps({"success": False, "error": str(e)}))
+        )
 
-class AIHandler(BaseHandler):
-    """AI走棋接口"""
-    def post(self):
+
+class GameUndoHandler(BaseHandler):
+    """POST /api/games/{game_id}/undo — 悔棋（可一次回退多着）"""
+
+    async def post(self, game_id: str) -> None:
+        body = self.read_json_body()
+        service = get_service()
         try:
-            data = json.loads(self.request.body)
-            ai_level = data.get("ai_level", "normal")
-            
-            board = global_state["board"]
-            current_game = global_state["current_game"]
-            current_game["ai_level"] = ai_level
-            
-            # 获取AI配置
-            ai_config = AI_CONFIG.get(ai_level, AI_CONFIG["normal"])
-            
-            # 执行AI走棋
-            with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-                result = engine.play(
-                    board, 
-                    chess.engine.Limit(
-                        time=ai_config["time_limit"], 
-                        depth=ai_config["depth_limit"]
-                    )
-                )
-                ai_move = str(result.move)
-                board.push(result.move)
-                
-                # 记录AI走棋
-                move_number = len(current_game["moves"]) + 1
-                color = "white" if not board.turn else "black"
-                move_info = {
-                    "move_number": move_number,
-                    "color": color,
-                    "move": ai_move,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "type": "ai"
-                }
-                current_game["moves"].append(move_info)
-                current_game["result"] = get_game_result(board)
-                save_game_data(current_game)
-                
-                # 广播更新
-                broadcast_game_update()
-                
-                response = {
-                    "success": True,
-                    "ai_move": ai_move,
-                    "ai_level": ai_level,
-                    "move_info": move_info,
-                    **get_board_snapshot(board, current_game),
-                }
-                self.write(json.dumps(response))
-        except Exception as e:
-            self.write(json.dumps({"success": False, "error": str(e)}))
+            state = await service.undo(game_id, body.get("plies", 1))
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json({"success": True, **state.snapshot()})
 
-class ResetHandler(BaseHandler):
-    """重置游戏接口"""
-    def post(self):
-        reset_current_game()
-        self.write(json.dumps({
-            "success": True, 
-            "fen": global_state["board"].fen(), 
-            "new_game_id": global_state["current_game"]["game_id"]
-        }))
 
-class SetGameModeHandler(BaseHandler):
-    """设置游戏模式接口"""
-    def post(self):
+class GameModeHandler(BaseHandler):
+    """POST /api/games/{game_id}/mode — 设置对局模式"""
+
+    async def post(self, game_id: str) -> None:
+        body = self.read_json_body()
+        service = get_service()
         try:
-            data = json.loads(self.request.body)
-            mode = data.get("mode")
-            player_color = data.get("player_color", "")
-            
-            current_game = global_state["current_game"]
-            current_game["mode"] = mode
-            current_game["player_color"] = player_color
-            current_game["ai_level"] = data.get("ai_level", "normal")
-            
-            save_game_data(current_game)
-            broadcast_game_update()
-            
-            self.write(json.dumps({
-                "success": True,
-                "game_id": current_game["game_id"],
-                "mode": mode,
-                "player_color": player_color
-            }))
-        except Exception as e:
-            self.write(json.dumps({"success": False, "error": str(e)}))
+            state = await service.set_mode(
+                game_id,
+                body.get("mode", ""),
+                body.get("player_color", ""),
+                body.get("ai_level", "normal"),
+            )
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json({"success": True, **state.snapshot()})
 
-class GetAllHistoryHandler(tornado.web.RequestHandler):
-    """获取所有游戏历史（适配单局存储）"""
-    def get(self):
+
+class GameResetHandler(BaseHandler):
+    """POST /api/games/{game_id}/reset — 归档当前局并开新局（返回新的 game_id）
+
+    可选 body：``{mode, player_color, ai_level}``，用于在重置的同时切换对局模式。
+    """
+
+    async def post(self, game_id: str) -> None:
+        body = self.read_json_body()
+        service = get_service()
         try:
-            # 获取所有游戏ID
-            game_ids = list_all_game_ids()
-            # 可选：加载每局的简要信息（仅基础信息，不加载完整走法）
-            history_summary = []
-            for game_id in game_ids:
-                game_data = load_single_game(game_id)
-                if game_data:
-                    # 仅返回简要信息，避免数据量过大
-                    history_summary.append({
-                        "game_id": game_id,
-                        "start_time": game_data["start_time"],
-                        "end_time": game_data["end_time"],
-                        "mode": game_data["mode"],
-                        "result": game_data["result"],
-                        "total_moves": len(game_data["moves"])
-                    })
-            
-            self.write({
-                "success": True,
-                "game_count": len(history_summary),
-                "games": history_summary
-            })
-        except Exception as e:
-            self.write({
-                "success": False,
-                "error": str(e)
-            })
+            state = await service.reset(
+                game_id,
+                mode=body.get("mode"),
+                player_color=body.get("player_color"),
+                ai_level=body.get("ai_level"),
+            )
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json(
+            {"success": True, "game_id": state.game_id, **state.snapshot()}, status=201
+        )
 
-class UndoMoveHandler(BaseHandler):
-    """悔棋接口"""
-    def post(self):
+
+class GameAnalysisHandler(BaseHandler):
+    """GET /api/games/{game_id}/analysis — 当前局面分析（带缓存）"""
+
+    async def get(self, game_id: str) -> None:
+        depth = self.get_query_argument("depth", None)
+        service = get_service()
         try:
-            board = global_state["board"]
-            current_game = global_state["current_game"]
-            
-            # 检查是否有走棋记录
-            if len(current_game["moves"]) == 0:
-                self.write(json.dumps({
-                    'success': False,
-                    'error': '暂无走棋记录，无法悔棋'
-                }))
-                return
-
-            # 撤销棋盘最后一步
-            if board.move_stack:
-                board.pop()
-            
-            # 撤销走棋历史
-            current_game["moves"].pop()
-            
-            # 更新游戏结果
-            current_game["result"] = "ongoing"
-            
-            # 保存更新
-            save_game_data(current_game)
-            
-            # 广播更新
-            broadcast_game_update()
-            
-            # 生成响应
-            result = get_game_result(board)
-            current_game["result"] = result
-            
-            self.write(json.dumps({
-                'success': True,
-                **get_board_snapshot(board, current_game),
-            }))
-        except Exception as e:
-            self.write(json.dumps({
-                'success': False,
-                'error': str(e)
-            }))
+            analysis = await service.position_analysis(
+                game_id, int(depth) if depth and depth.isdigit() else None
+            )
+        except EngineUnavailable as exc:
+            self.write_json(
+                {
+                    "success": False,
+                    "engine_available": False,
+                    "error": f"Stockfish 引擎不可用：{exc}",
+                },
+                status=503,
+            )
+            return
+        except GameError as exc:
+            self.handle_game_error(exc)
+            return
+        self.write_json({"success": True, **analysis})

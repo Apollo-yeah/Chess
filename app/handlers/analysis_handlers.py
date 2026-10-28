@@ -1,112 +1,112 @@
-import json
-import chess
-import chess.engine
-from .base_handler import BaseHandler
-from app.config import STOCKFISH_PATH
-from app.utils import global_state
+"""长棋谱分析任务接口 + 系统状态接口。
 
-class GameAnalysisHandler(BaseHandler):
-    """棋局分析接口"""
-    def get(self):
+长棋谱分析被拆成「提交任务 → 轮询进度」两段，HTTP 请求不再挂着引擎跑几分钟。
+"""
+
+import logging
+
+from app.config import MAX_PGN_BYTES, MAX_PGN_PLIES
+from app.engine.jobs import get_job_manager
+from app.engine.pool import EngineUnavailable
+from app.game.service import GameError
+from app.handlers.base_handler import BaseHandler
+
+logger = logging.getLogger(__name__)
+
+
+class AnalysisJobsHandler(BaseHandler):
+    """GET  /api/analysis/jobs — 任务列表
+    POST /api/analysis/jobs — 提交整局 PGN 分析任务
+    """
+
+    async def get(self) -> None:
+        manager = get_job_manager()
+        self.write_json({"success": True, "jobs": manager.list(), "stats": manager.stats()})
+
+    async def post(self) -> None:
+        body = self.read_json_body()
+        pgn_text = (body.get("pgn_text") or "").strip()
+        if not pgn_text:
+            raise GameError("PGN 文本不能为空")
+
+        raw = pgn_text.encode("utf-8")
+        if len(raw) > MAX_PGN_BYTES:
+            raise GameError(f"PGN 过大（{len(raw)} 字节，上限 {MAX_PGN_BYTES} 字节）")
+
+        depth = body.get("depth")
         try:
-            # 初始化返回结果，默认值更安全
-            analysis_result = {
-                "success": False,
-                "advantage": "unknown",
-                "advantage_score": 0,
-                "white_best_move": "",
-                "black_best_move": "",
-                "current_best_move": "",
-                "error": ""
+            depth = int(depth) if depth is not None else None
+        except (TypeError, ValueError):
+            raise GameError("depth 必须是整数") from None
+        if depth is not None and not (4 <= depth <= 24):
+            raise GameError("depth 需在 4~24 之间")
+
+        if pgn_text.count(" ") + 1 > MAX_PGN_PLIES * 2:
+            logger.info("PGN 长度提示：走法数可能超过上限 %s", MAX_PGN_PLIES)
+
+        manager = get_job_manager()
+        job = await manager.submit(pgn_text, depth)
+        self.write_json({"success": True, **job.snapshot()}, status=202)
+
+
+class AnalysisJobHandler(BaseHandler):
+    """GET    /api/analysis/jobs/{job_id} — 查询进度 / 结果
+    DELETE /api/analysis/jobs/{job_id} — 取消任务
+    """
+
+    async def get(self, job_id: str) -> None:
+        manager = get_job_manager()
+        job = manager.get(job_id)
+        if job is None:
+            self.write_json({"success": False, "error": f"任务不存在：{job_id}"}, status=404)
+            return
+        self.write_json({"success": True, **job.snapshot()})
+
+    async def delete(self, job_id: str) -> None:
+        manager = get_job_manager()
+        job = manager.cancel(job_id)
+        if job is None:
+            self.write_json({"success": False, "error": f"任务不存在：{job_id}"}, status=404)
+            return
+        self.write_json({"success": True, **job.snapshot()})
+
+
+class HealthHandler(BaseHandler):
+    """GET /api/health — 供容器 healthcheck 与运维排查使用"""
+
+    async def get(self) -> None:
+        from app.engine.analysis import cache_stats
+        from app.engine.pool import get_pool
+        from app.game.registry import get_registry
+        from app.game.storage import storage_info
+
+        pool = get_pool()
+        engine = pool.stats()
+        try:
+            from app.engine.analysis import analyse_position
+
+            probe = await analyse_position(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                depth=4,
+                with_best_moves=False,
+            )
+            engine["probe_ok"] = bool(probe.get("success"))
+        except EngineUnavailable as exc:
+            engine["probe_ok"] = False
+            engine["error"] = str(exc)
+        except Exception as exc:  # noqa: BLE001 - 健康检查不能抛异常
+            engine["probe_ok"] = False
+            engine["error"] = str(exc)
+
+        jobs = get_job_manager().stats()
+        self.write_json(
+            {
+                "success": True,
+                "status": "ok" if engine.get("probe_ok") else "degraded",
+                "engine": engine,
+                "jobs": jobs,
+                "games": get_registry().stats(),
+                "analysis_cache": cache_stats(),
+                "storage": storage_info(),
             }
-            
-            # 获取全局棋盘，增加空值判断
-            board = global_state.get("board")
-            if board is None:
-                analysis_result["error"] = "全局棋盘未初始化"
-                self.write(json.dumps(analysis_result))
-                return
-            
-            # 检查棋盘是否有合法走法
-            if not any(board.legal_moves):
-                analysis_result["error"] = "当前局面无合法走法（可能是将死/和棋）"
-                self.write(json.dumps(analysis_result))
-                return
-            
-            # 使用Stockfish进行分析
-            try:
-                with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-                    # 获取当前局面评分
-                    info = engine.analyse(board, chess.engine.Limit(depth=15))
-                    score = info["score"].relative
-                    
-                    # 计算优势分数
-                    if score.is_mate():
-                        mate_in = score.mate()
-                        analysis_result["advantage_score"] = 100 if mate_in > 0 else -100
-                        analysis_result["advantage"] = "white_winning" if mate_in > 0 else "black_winning"
-                    else:
-                        centipawn = score.score() or 0
-                        normalized_score = centipawn / 100
-                        analysis_result["advantage_score"] = round(normalized_score, 1)
-                        
-                        # 判断优势方
-                        if normalized_score > 5:
-                            analysis_result["advantage"] = "white_advantage"
-                        elif normalized_score < -5:
-                            analysis_result["advantage"] = "black_advantage"
-                        elif normalized_score > 1:
-                            analysis_result["advantage"] = "slight_white_advantage"
-                        elif normalized_score < -1:
-                            analysis_result["advantage"] = "slight_black_advantage"
-                        else:
-                            analysis_result["advantage"] = "equal"
-                    
-                    # ========= 核心修复：增加None判断 =========
-                    # 获取当前回合最佳走法（增加异常捕获）
-                    current_best_move = None
-                    try:
-                        current_best_move = engine.play(board, chess.engine.Limit(depth=10))
-                    except chess.engine.EngineError as e:
-                        analysis_result["error"] = f"获取最佳走法失败：{str(e)}"
-                        self.write(json.dumps(analysis_result))
-                        return
-                    
-                    # 检查是否获取到有效走法
-                    if current_best_move and current_best_move.move:
-                        analysis_result["current_best_move"] = str(current_best_move.move)
-                        
-                        # 计算双方最佳走法（增加None判断）
-                        if board.turn:  # 白棋回合
-                            analysis_result["white_best_move"] = str(current_best_move.move)
-                            # 模拟白棋走最佳步，计算黑棋应对
-                            temp_board = board.copy()
-                            temp_board.push(current_best_move.move)
-                            # 检查临时棋盘是否有合法走法
-                            if any(temp_board.legal_moves):
-                                black_response = engine.play(temp_board, chess.engine.Limit(depth=8))
-                                if black_response and black_response.move:
-                                    analysis_result["black_best_move"] = str(black_response.move)
-                        else:  # 黑棋回合
-                            analysis_result["black_best_move"] = str(current_best_move.move)
-                            # 模拟黑棋走最佳步，计算白棋应对
-                            temp_board = board.copy()
-                            temp_board.push(current_best_move.move)
-                            # 检查临时棋盘是否有合法走法
-                            if any(temp_board.legal_moves):
-                                white_response = engine.play(temp_board, chess.engine.Limit(depth=8))
-                                if white_response and white_response.move:
-                                    analysis_result["white_best_move"] = str(white_response.move)
-                    else:
-                        analysis_result["error"] = "当前局面无最佳走法（可能已结束）"
-                        self.write(json.dumps(analysis_result))
-                        return
-                    
-                    analysis_result["success"] = True
-                    
-            except Exception as e:
-                analysis_result["error"] = f"分析失败：{str(e)}"
-            
-            self.write(json.dumps(analysis_result))
-        except Exception as e:
-            self.write(json.dumps({"success": False, "error": f"接口异常：{str(e)}"}))
+        )

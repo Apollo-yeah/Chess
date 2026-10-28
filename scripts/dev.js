@@ -1,43 +1,14 @@
 #!/usr/bin/env node
-import { spawn } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
+/** 开发模式：Tornado API + Vite dev server（Vite 反向代理 /api 与 /ws） */
+import { apiPort, pythonBin, runApi, runVite, supervise, withDevOrigins } from './lib.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+const port = apiPort();
 
-function run(cmd, args, opts = {}) {
-  return spawn(cmd, args, {
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-    ...opts,
-  });
-}
+const api = runApi(withDevOrigins());
+const web = runVite('dev');
 
-const python = run('python', ['-m', 'app'], {
-  cwd: root,
-  env: { ...process.env, PYTHONPATH: root },
-});
+supervise([api, web]);
 
-const vite = run('npx', ['vite', '--config', 'web/vite.config.js'], {
-  cwd: root,
-});
-
-function shutdown() {
-  python.kill();
-  vite.kill();
-  process.exit(0);
-}
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
-
-python.on('exit', (code) => {
-  if (code !== 0 && code !== null) shutdown();
-});
-vite.on('exit', (code) => {
-  if (code !== 0 && code !== null) shutdown();
-});
-
-console.log('\n  Dev server: http://localhost:5173');
-console.log('  API server: http://localhost:8156\n');
+console.log('\n  Web (dev):  http://localhost:5173');
+console.log(`  API:        http://localhost:${port}   (python: ${pythonBin()})`);
+console.log('  改动前端 → HMR 即时生效，无需重新构建、无需重启后端\n');

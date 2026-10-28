@@ -10,7 +10,6 @@ app/.env
 app/game_data/
 app/game_pgn/
 app/stockfish/
-app/static/dist/
 
 ####################################
 # Node / Web
@@ -20,9 +19,10 @@ web/node_modules/
 npm-debug.log*
 
 ####################################
-# Build artifacts (legacy)
+# Build artifacts
 ####################################
-web/build/
+# 前端产物自带于 web/dist（不再写入 app/static）
+web/dist/
 dist/
 build/
 
@@ -46,10 +46,12 @@ Thumbs.db
 
 ####################################
 # PGN / local data
+####################################
 game_data/*
 game_pgn/*
 a_chess_data/*
 
 ####################################
 # Docker
+####################################
 z_chess.tar

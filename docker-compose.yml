@@ -1,10 +1,74 @@
+# z_chess — 双服务拓扑
+#
+#   web  : nginx 托管前端静态产物，并把 /api、/ws 反代到 api（唯一对外端口）
+#   api  : Tornado API + WebSocket，仅在内网暴露，不映射宿主机端口
+#
+# 启动：docker compose up -d --build      访问：http://localhost:${WEB_PORT:-8155}
+
+name: z-chess
+
 services:
-  chess:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8156:8156"
+      target: api
+    image: z-chess-api:latest
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      PORT: "8156"
+      SERVER_HOST: "0.0.0.0"
+      # 发行版安装的真实路径（容器内 `command -v stockfish` 可验证）
+      STOCKFISH_PATH: "/usr/games/stockfish"
+      ENGINE_POOL_SIZE: "2"
+      ENGINE_HASH_MB: "64"
+      ENGINE_THREADS: "1"
+      CHESS_DATA_DIR: "/app/app/game_data"
+      CHESS_PGN_DIR: "/app/app/game_pgn"
     volumes:
+      # 对局与棋谱持久化：容器重建后数据仍在
       - ./app/game_data:/app/app/game_data
       - ./app/game_pgn:/app/app/game_pgn
+    # 仅内网可达，不发布到宿主机
+    expose:
+      - "8156"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python -c "import sys,urllib.request; sys.exit(0 if
+          urllib.request.urlopen('http://127.0.0.1:8156/api/health', timeout=5).status == 200 else 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - chess
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    image: z-chess-web:latest
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8155}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O /dev/null http://127.0.0.1/ || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - chess
+
+networks:
+  chess:
+    driver: bridge
