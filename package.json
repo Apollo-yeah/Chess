@@ -16,6 +16,14 @@
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
+    "deploy": "bash scripts/deploy-macmini.sh deploy",
+    "deploy:sync": "bash scripts/deploy-macmini.sh sync",
+    "deploy:restart": "bash scripts/deploy-macmini.sh restart",
+    "deploy:status": "bash scripts/deploy-macmini.sh status",
+    "deploy:logs": "bash scripts/deploy-macmini.sh logs",
+    "deploy:stop": "bash scripts/deploy-macmini.sh stop",
+    "deploy:dry": "bash scripts/deploy-macmini.sh dry",
+    "deploy:doctor": "bash scripts/deploy-macmini.sh doctor",
     "install:all": "npm install && pip install -r requirements.txt"
   },
   "dependencies": {

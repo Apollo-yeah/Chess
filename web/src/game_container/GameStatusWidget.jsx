@@ -82,6 +82,13 @@ const GameStatusWidget = forwardRef((props, ref) => {
 
   const applyMessage = useCallback(
     (data) => {
+      const incomingId = data.game_id || data.status?.game_info?.game_id || '';
+      if ((data.type === 'hello' || data.type === 'status_update') && incomingId && incomingId !== gameIdRef.current) {
+        setAdvantageHistory([]);
+        setAnalysisData(null);
+        setCurrentGameId(incomingId);
+        saveGameId(incomingId);
+      }
       if (data.type === 'hello') {
         setStatusData(data.status);
         setAnalysisPending(true);
@@ -114,7 +121,8 @@ const GameStatusWidget = forwardRef((props, ref) => {
   const connectWebSocket = useCallback(() => {
     if (!shouldReconnectRef.current || wsRef.current) return;
 
-    const url = buildWsUrl(gameIdRef.current || undefined);
+    // 不带 game_id：跟着服务端当前这一局，断线重连也不会停在已经重置掉的旧局
+    const url = buildWsUrl();
     setConnectionStatus('connecting');
 
     let socket;

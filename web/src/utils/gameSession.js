@@ -1,10 +1,11 @@
 /**
- * 对局会话：把 game_id 存在浏览器本地，实现「刷新页面仍是同一局」。
+ * 当前服务的共享对局。
  *
- * 每个浏览器各自持有一个 game_id，对应后端注册表里独立的一局棋，
- * 因此多人同时访问互不干扰。
+ * 进入这个进程的每个客户端都加入同一局，可以一起看、一起走棋。
+ * 本地仍记下 game_id，只为让同一浏览器里的其它板块显示一致；
+ * 真正以哪一局为准，由服务端的「当前对局」决定。
  */
-import { createGame, fetchGameState } from './apiUtils.js';
+import { fetchCurrentGame } from './apiUtils.js';
 
 const STORAGE_KEY = 'zchess.game_id';
 
@@ -32,22 +33,9 @@ export function clearGameId() {
   }
 }
 
-/**
- * 取得当前会话的对局：本地有且服务端仍存在则复用，否则新建一局。
- * @param {{mode?: string, player_color?: string, ai_level?: string}} defaults 新建时使用的初始配置
- */
-export async function ensureSessionGame(defaults = {}) {
-  const existing = loadGameId();
-  if (existing) {
-    try {
-      const state = await fetchGameState(existing);
-      saveGameId(state.game_id || existing);
-      return state;
-    } catch {
-      clearGameId();
-    }
-  }
-  const state = await createGame(defaults);
+/** 取得本进程正在进行的那一局；还没有时由服务端创建。 */
+export async function ensureSessionGame() {
+  const state = await fetchCurrentGame();
   saveGameId(state.game_id);
   return state;
 }

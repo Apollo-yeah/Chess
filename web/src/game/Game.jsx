@@ -3,13 +3,14 @@ import './Game.css';
 import MoveHistoryWidget from './MoveHistoryWidget.jsx';
 
 // 导入常量
-import { PIECE_IMAGES, PROMOTION_OPTIONS, PROMOTION_NAMES } from '../constants/chess_config.js';
+import { PROMOTION_OPTIONS, PROMOTION_NAMES } from '../constants/chess_config.js';
+import PieceView from '../pieces/PieceView.jsx';
+import ThemeSwitcher from '../pieces/ThemeSwitcher.jsx';
 
 // 导入工具函数
 import { parseFEN, toChessNotation, fromChessNotation, updateBoardLocally, initBoard } from '../utils/boardUtils.js';
 import { getInvalidMoveReason, isPromotion, isValidPromotionMove, parseLegalMovePositions } from '../utils/moveUtils.js';
 import {
-  createGame,
   fetchGameState,
   makeMoveToServer,
   requestAIMoveToServer,
@@ -18,6 +19,7 @@ import {
   undoMoveToServer,
 } from '../utils/apiUtils.js';
 import { ensureSessionGame, loadGameId, saveGameId, clearGameId } from '../utils/gameSession.js';
+import { useLiveGame } from '../utils/useLiveGame.js';
 import { resolveGameEndState, getWinnerLabel } from '../utils/gameStateUtils.js';
 import ChessBoard from '../component/ChessBox.jsx';
 
@@ -27,6 +29,7 @@ function Game() {
   const [legalMoves, setLegalMoves] = useState([]);
   const [currentTurn, setCurrentTurn] = useState('white');
   const [gameId, setGameId] = useState(loadGameId());
+  const [synced, setSynced] = useState(false);
   const [gameInfo, setGameInfo] = useState({});
   const [statistics, setStatistics] = useState({});
   const [loading, setLoading] = useState(false);
@@ -45,6 +48,10 @@ function Game() {
 
   // 防止 AI 走棋被重复触发（例如 effect 重入 + 手动按钮同时点击）
   const aiThinkingRef = useRef(false);
+  const gameIdRef = useRef(gameId);
+  gameIdRef.current = gameId;
+  /** 丢掉比界面更旧的快照，避免其它客户端的推送把棋盘打回去 */
+  const seenRef = useRef({ id: '', version: -1 });
   const gameMode = gameInfo.mode || '';
   const playerColor = gameInfo.player_color || '';
   const aiLevel = gameInfo.ai_level || 'normal';
@@ -55,12 +62,21 @@ function Game() {
     setHint({ show: true, text, type });
   }, []);
 
-  /** 把后端返回的完整快照落到界面状态 */
+  /** 把后端返回的完整快照落到界面状态。更旧的版本直接丢掉。 */
   const applySnapshot = useCallback((data) => {
     if (!data || !data.board_state) return;
     const boardState = data.board_state;
     const history = data.move_history || [];
     const info = data.game_info || {};
+    const incomingId = info.game_id || '';
+    const incomingVersion = Number(info.version ?? 0);
+    const seen = seenRef.current;
+    if (incomingId && incomingId === seen.id && incomingVersion < seen.version) return;
+    const changed = !incomingId || incomingId !== seen.id || incomingVersion !== seen.version;
+    if (incomingId) {
+      seenRef.current = { id: incomingId, version: incomingVersion };
+      gameIdRef.current = incomingId;
+    }
     const turn = boardState.turn || 'white';
 
     setBoard(parseFEN(boardState.fen));
@@ -123,9 +139,22 @@ function Game() {
 
     setSelected(null);
     setLegalMovePositions([]);
+    if (changed) {
+      setShowPromotion(false);
+      setPromotionData({});
+    }
   }, []);
 
-  /** 启动：复用本地会话对局；服务端已无此局则新建 */
+  /** 走棋回包如果还停在旧局，而实时通道已经切到新局，就不要把界面拉回去。 */
+  const applyIfCurrent = useCallback((requestedId, data) => {
+    const returned = data?.game_info?.game_id || '';
+    if (returned && returned === requestedId && gameIdRef.current !== requestedId) return;
+    applySnapshot(data);
+  }, [applySnapshot]);
+
+  useLiveGame(applySnapshot, setSynced);
+
+  /** 启动：加入本进程正在进行的那一局 */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -147,7 +176,7 @@ function Game() {
   }, [applySnapshot, showHint]);
 
   const reloadState = useCallback(
-    async (id = gameId) => {
+    async (id = gameIdRef.current) => {
       if (!id) return null;
       try {
         const data = await fetchGameState(id);
@@ -155,26 +184,27 @@ function Game() {
         return data;
       } catch (err) {
         if (err.status === 404) {
-          // 后端不认识这个对局（例如数据被清理）：静默开新局
+          // 这局已经不在了：回到服务端当前正在进行的那一局
           clearGameId();
-          const fresh = await createGame();
+          const fresh = await ensureSessionGame();
           applySnapshot(fresh);
           return fresh;
         }
         throw err;
       }
     },
-    [gameId, applySnapshot],
+    [applySnapshot],
   );
 
   // --- 模式切换：重置并带上新的模式 ---
   const switchMode = useCallback(
     async (mode, color = '') => {
-      if (!gameId) return;
+      const id = gameIdRef.current;
+      if (!id) return;
       setLoading(true);
       try {
-        const data = await resetGameToServer(gameId, mode ? { mode, player_color: color } : {});
-        applySnapshot(data);
+        const data = await resetGameToServer(id, mode ? { mode, player_color: color } : {});
+        applyIfCurrent(id, data);
         if (mode === 'ai') {
           showHint(`已开始人机对战（你执${color === 'white' ? '白' : '黑'}棋）`, 'info');
         } else if (mode === 'self') {
@@ -188,22 +218,23 @@ function Game() {
         setLoading(false);
       }
     },
-    [gameId, applySnapshot, showHint],
+    [applyIfCurrent, showHint],
   );
 
   const selectAILevel = useCallback(
     async (level) => {
-      if (gameMode !== 'ai' || !gameId) return;
+      const id = gameIdRef.current;
+      if (gameMode !== 'ai' || !id) return;
       try {
         // 只切等级，不重置对局
-        const data = await setGameModeToServer(gameId, 'ai', playerColor, level);
-        applySnapshot(data);
+        const data = await setGameModeToServer(id, 'ai', playerColor, level);
+        applyIfCurrent(id, data);
         showHint(`已切换为${level === 'normal' ? '普通' : '高级'} AI`, 'info');
       } catch (err) {
         showHint(err.message, 'error');
       }
     },
-    [gameMode, gameId, playerColor, applySnapshot, showHint],
+    [gameMode, playerColor, applyIfCurrent, showHint],
   );
 
   const handlePromotionSelect = (pieceType) => {
@@ -218,9 +249,11 @@ function Game() {
   const submitMove = useCallback(
     async (move, successText = '走棋成功') => {
       const rollback = board.map((row) => [...row]);
+      const id = gameIdRef.current;
+      if (!id) return;
       try {
-        const data = await makeMoveToServer(gameId, move);
-        applySnapshot(data);
+        const data = await makeMoveToServer(id, move);
+        applyIfCurrent(id, data);
         const { isCheckmate } = resolveGameEndState(data.board_state || {});
         showHint(isCheckmate ? '将死！对局结束' : successText, isCheckmate ? 'warning' : 'info');
       } catch (err) {
@@ -232,7 +265,7 @@ function Game() {
         reloadState().catch(() => {});
       }
     },
-    [board, gameId, applySnapshot, showHint, reloadState],
+    [board, applyIfCurrent, showHint, reloadState],
   );
 
   // 处理棋盘格子点击
@@ -332,32 +365,42 @@ function Game() {
   };
 
   // AI 走棋
-  const handleAIMove = useCallback(async () => {
-    if (!gameId || aiThinkingRef.current || endState.over) return;
+  const handleAIMove = useCallback(async ({ automatic = false } = {}) => {
+    const id = gameIdRef.current;
+    if (!id || aiThinkingRef.current || endState.over) return;
     aiThinkingRef.current = true;
     setLoading(true);
     showHint('AI 正在思考…', 'info');
     try {
-      const data = await requestAIMoveToServer(gameId, aiLevelRef.current);
-      applySnapshot(data);
+      const data = await requestAIMoveToServer(id, aiLevelRef.current);
+      applyIfCurrent(id, data);
       const { isCheckmate } = resolveGameEndState(data.board_state || {});
       showHint(
         isCheckmate ? `将死！${getWinnerLabel(data.board_state?.turn, data.board_state?.game_result)} 获胜` : `AI 走棋：${data.ai_move}`,
         isCheckmate ? 'warning' : 'info',
       );
     } catch (err) {
-      showHint(err.message, 'error');
+      // 多个客户端会同时替 AI 落子，只有一个成功；其余对齐到已经走完的局面
+      const message = err?.message || '';
+      const raced =
+        automatic &&
+        (message.includes('当前是玩家回合') || message.includes('已无棋可走') || message.includes('对局已结束'));
+      if (raced) {
+        await reloadState().catch(() => {});
+      } else {
+        showHint(message, 'error');
+      }
     } finally {
       aiThinkingRef.current = false;
       setLoading(false);
     }
-  }, [gameId, endState.over, applySnapshot, showHint]);
+  }, [endState.over, applyIfCurrent, showHint, reloadState]);
 
   // AI 回合自动落子
   useEffect(() => {
     if (booting || loading || gameMode !== 'ai' || !gameId) return;
     if (endState.over) return;
-    if (currentTurn !== playerColor) handleAIMove();
+    if (currentTurn !== playerColor) handleAIMove({ automatic: true });
   }, [booting, loading, gameMode, gameId, currentTurn, playerColor, endState.over, handleAIMove]);
 
   // 提示自动消失
@@ -369,11 +412,12 @@ function Game() {
   }, [hint.show, hint.type]);
 
   const resetGame = async () => {
-    if (!gameId) return;
+    const id = gameIdRef.current;
+    if (!id) return;
     setLoading(true);
     try {
-      const data = await resetGameToServer(gameId);
-      applySnapshot(data);
+      const data = await resetGameToServer(id);
+      applyIfCurrent(id, data);
       showHint('对局已重置', 'info');
     } catch (err) {
       showHint(err.message, 'error');
@@ -384,15 +428,16 @@ function Game() {
 
   const undoMove = async () => {
     const plies = gameMode === 'ai' ? 2 : 1;
-    if (!gameId || loading || gameAlert.type === 'checkmate') return;
+    const id = gameIdRef.current;
+    if (!id || loading || gameAlert.type === 'checkmate') return;
     if (moveHistory.length < plies) {
       showHint(`暂无足够走棋记录（需要至少 ${plies} 着），无法悔棋`, 'warning');
       return;
     }
     setLoading(true);
     try {
-      const data = await undoMoveToServer(gameId, plies);
-      applySnapshot(data);
+      const data = await undoMoveToServer(id, plies);
+      applyIfCurrent(id, data);
       showHint(`悔棋成功（已回退 ${plies} 着）`, 'info');
     } catch (err) {
       showHint(err.message, 'error');
@@ -423,6 +468,9 @@ function Game() {
             {statistics.total_moves > 0 && (
               <span className="game-header__label">共 {statistics.total_moves} 着</span>
             )}
+            <span className={`game-header__label ${synced ? 'game-header__label--live' : ''}`}>
+              {synced ? '实时同步' : '未连接'}
+            </span>
           </div>
         )}
       </header>
@@ -464,6 +512,8 @@ function Game() {
             </button>
           </div>
         </div>
+
+        <ThemeSwitcher />
 
         {gameMode === 'ai' && (
           <div className="toolbar-group">
@@ -519,7 +569,7 @@ function Game() {
         {gameMode === 'ai' && (
           <button
             className="btn btn--primary"
-            onClick={handleAIMove}
+            onClick={() => handleAIMove()}
             disabled={isGameLocked || gameAlert.type === 'checkmate' || endState.isStalemate}
           >
             {loading ? (
@@ -548,7 +598,7 @@ function Game() {
                   className="promotion-btn"
                   disabled={gameAlert.type === 'checkmate'}
                 >
-                  <img src={PIECE_IMAGES[piece]} alt={PROMOTION_NAMES[piece]} className="promotion-img" />
+                  <PieceView piece={piece} className="promotion-img" />
                   <span>{PROMOTION_NAMES[piece]}</span>
                 </button>
               ))}

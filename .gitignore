@@ -6,6 +6,8 @@ app/**/__pycache__/
 app/*.py[cod]
 app/venv/
 app/.venv/
+.venv/
+.run/
 app/.env
 app/game_data/
 app/game_pgn/

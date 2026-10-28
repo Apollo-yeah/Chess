@@ -18,5 +18,5 @@ build.on('exit', (code) => {
 
   console.log('\n  Web:  http://localhost:4173   （托管 web/dist，/api 与 /ws 代理到后端）');
   console.log(`  API:  http://localhost:${port}\n`);
-  console.log('  生产部署请使用：npm run docker:up（Nginx 托管静态资源 + 反代 API）\n');
+  console.log('  生产部署：npm run docker:up（本机 Docker），或 npm run deploy（Mac Mini）\n');
 });

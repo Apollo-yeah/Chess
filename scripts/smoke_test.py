@@ -182,6 +182,101 @@ async def section_websocket(id_a: str) -> None:
     connection.close()
 
 
+async def _next_message(connection, predicate, timeout: float = 20):
+    """读到第一条满足条件的推送，中间的分析包直接跳过。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        remaining = max(1.0, deadline - time.time())
+        message = await asyncio.wait_for(connection.read_message(), timeout=remaining)
+        if message is None:
+            return None
+        data = json.loads(message)
+        if predicate(data):
+            return data
+    return None
+
+
+async def section_live_share() -> None:
+    print("\n[11] 共享当前对局")
+    code, first = await api("GET", "/api/games/current")
+    code2, second = await api("GET", "/api/games/current")
+    check("GET /api/games/current → 200", code == 200 and code2 == 200, f"{code}/{code2}")
+    live_id = first.get("game_id")
+    check("两个客户端拿到同一局", bool(live_id) and live_id == second.get("game_id"), f"{live_id} vs {second.get('game_id')}")
+
+    _, private = await api("POST", "/api/games", {"mode": "self"})
+    _, still = await api("GET", "/api/games/current")
+    check(
+        "单独建局不替换当前局",
+        still.get("game_id") == live_id and private.get("game_id") != live_id,
+        f"live={still.get('game_id')} private={private.get('game_id')}",
+    )
+
+    left = await websocket_connect(f"{WS_BASE}/ws/game")
+    right = await websocket_connect(f"{WS_BASE}/ws/game")
+    hello_l = json.loads(await asyncio.wait_for(left.read_message(), timeout=10))
+    hello_r = json.loads(await asyncio.wait_for(right.read_message(), timeout=10))
+    check(
+        "未指定 game_id 时两边都进入当前局",
+        hello_l.get("type") == "hello"
+        and hello_l.get("game_id") == live_id
+        and hello_r.get("game_id") == live_id,
+        f"{hello_l.get('game_id')} / {hello_r.get('game_id')}",
+    )
+
+    code, reset = await api("POST", f"/api/games/{live_id}/reset", {"mode": "self"})
+    new_id = reset.get("game_id")
+    check("重置当前局得到新 id", code == 201 and bool(new_id) and new_id != live_id, f"code={code} {new_id}")
+
+    def is_new_board(data: dict) -> bool:
+        info = data.get("status", {}).get("game_info", {})
+        return data.get("type") == "status_update" and info.get("game_id") == new_id
+
+    status_l, status_r = await asyncio.gather(
+        _next_message(left, is_new_board),
+        _next_message(right, is_new_board),
+    )
+    check("重置后两个连接都看到新局", status_l is not None and status_r is not None)
+    if status_l:
+        check("新局是初始局面", status_l["status"]["board_state"]["fen"] == INITIAL_FEN, status_l["status"]["board_state"]["fen"])
+
+    _, after_reset = await api("GET", "/api/games/current")
+    check("当前局指针已指向新局", after_reset.get("game_id") == new_id, after_reset.get("game_id"))
+
+    code, moved = await api("POST", f"/api/games/{new_id}/move", {"move": "e2e4"})
+    check("任一客户端可以走当前局", code == 200 and moved.get("success") is True, json.dumps(moved)[:180])
+
+    def is_e4(data: dict) -> bool:
+        history = data.get("status", {}).get("move_history") or []
+        return data.get("type") == "status_update" and bool(history) and history[-1].get("move") == "e2e4"
+
+    move_l, move_r = await asyncio.gather(
+        _next_message(left, is_e4),
+        _next_message(right, is_e4),
+    )
+    check("走棋后两个连接都看到 e4", move_l is not None and move_r is not None)
+
+    _, mirrored = await api("GET", "/api/games/current")
+    check(
+        "再次进入仍是走完 e4 的这一局",
+        mirrored.get("game_id") == new_id and mirrored.get("statistics", {}).get("total_moves") == 1,
+        json.dumps(mirrored.get("statistics"))[:120],
+    )
+
+    ghost = await websocket_connect(f"{WS_BASE}/ws/game?game_id=does-not-exist")
+    hello_g = json.loads(await asyncio.wait_for(ghost.read_message(), timeout=10))
+    check("不存在的 game_id 改入当前局", hello_g.get("game_id") == new_id, hello_g.get("game_id"))
+
+    named = await websocket_connect(f"{WS_BASE}/ws/game?game_id={private['game_id']}")
+    hello_n = json.loads(await asyncio.wait_for(named.read_message(), timeout=10))
+    check("显式 game_id 仍可订阅指定局", hello_n.get("game_id") == private["game_id"], hello_n.get("game_id"))
+
+    left.close()
+    right.close()
+    ghost.close()
+    named.close()
+
+
 async def section_non_blocking() -> None:
     print("\n[6] 引擎计算不阻塞 IOLoop")
     code, job = await api("POST", "/api/analysis/jobs", {"pgn_text": LONG_PGN, "depth": 12})
@@ -379,6 +474,22 @@ async def section_proxy(web_base: str) -> None:
 
     # 以浏览器身份带 Origin 建立 WebSocket（websocket_connect 支持传 HTTPRequest）
     origin = web
+    # 无 game_id 的连接会进入当前共享局。先重置，保证后面的 d2d4 落在初始局面上。
+    current_resp = await client.fetch(f"{web}/api/games/current", raise_error=False)
+    current_payload = json.loads(current_resp.body or b"{}")
+    check("代理可以读取当前对局", current_resp.code == 200 and bool(current_payload.get("game_id")),
+          f"code={current_resp.code}")
+    reset_resp = await client.fetch(
+        HTTPRequest(
+            url=f"{web}/api/games/{current_payload.get('game_id')}/reset",
+            method="POST",
+            headers={"Content-Type": "application/json", "Origin": origin},
+            body=json.dumps({"mode": "self"}),
+        ),
+        raise_error=False,
+    )
+    check("代理重置当前局到初始局面", reset_resp.code == 201, f"code={reset_resp.code}")
+
     ws_request = HTTPRequest(
         url=f"{web.replace('http://', 'ws://')}/ws/game",
         headers={"Origin": origin},
@@ -423,6 +534,7 @@ async def main() -> int:
         await section_job_cancel()
         await section_finish_and_pgn()
         await section_parallel_isolation()
+        await section_live_share()
         if len(sys.argv) > 2:
             await section_proxy(sys.argv[2])
     finally:

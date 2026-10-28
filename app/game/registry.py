@@ -84,14 +84,16 @@ class GameRegistry:
         await self._storage.save(state.to_dict())
 
     async def archive(self, state: GameState) -> None:
-        """归档当前对局：未结束的标记为 abandoned 后落盘（并导出 PGN）。"""
-        if state.moves:
-            if not state.end_time:
-                state.end_time = now_str()
-            if state.result == "ongoing":
-                state.result = "abandoned"
-            state.touch()
-            await self.persist(state)
+        """归档当前对局：标记为 abandoned 后落盘（有走法时导出 PGN），再移出内存。
+
+        即使还没走子也要标成结束，避免客户端拿着旧 id 继续把这局下下去。
+        """
+        if not state.end_time:
+            state.end_time = now_str()
+        if state.result == "ongoing":
+            state.result = "abandoned"
+        state.touch()
+        await self.persist(state)
         self.forget(state.game_id)
 
     def forget(self, game_id: str) -> None:

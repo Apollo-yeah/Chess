@@ -6,6 +6,8 @@
 node_modules
 web/node_modules
 web/dist
+.venv
+.run
 app/static/dist
 
 # 引擎二进制：app/stockfish/ 是 macOS arm64 版本，Linux 镜像不可用

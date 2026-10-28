@@ -6,6 +6,7 @@
 * 每次变更：落盘 → 推送状态 → 由 Hub 异步补推分析。
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -34,6 +35,9 @@ class GameService:
     def __init__(self, registry: Optional[GameRegistry] = None, hub: Optional[GameHub] = None):
         self._registry = registry or get_registry()
         self._hub = hub or get_hub()
+        # 本进程正在进行的那一局。所有未指定 game_id 的客户端都进入这里。
+        self._live_id: Optional[str] = None
+        self._live_lock = asyncio.Lock()
 
     # --- 查询 ---
     async def history(self) -> list[dict]:
@@ -44,6 +48,21 @@ class GameService:
         if state is None:
             raise GameNotFound(f"对局不存在：{game_id}")
         return state
+
+    async def current(self) -> tuple[GameState, bool]:
+        """返回本进程正在进行的那一局。
+
+        还没有时创建一局。并发进入时只创建一次，之后所有客户端拿到同一 ``game_id``。
+        返回 ``(state, created)``。
+        """
+        async with self._live_lock:
+            if self._live_id:
+                state = await self._registry.get(self._live_id)
+                if state is not None:
+                    return state, False
+            state = await self._registry.create(persist=True)
+            self._live_id = state.game_id
+            return state, True
 
     async def create(
         self,
@@ -194,11 +213,16 @@ class GameService:
             new_color = ""
         new_level = ai_level if ai_level in AI_LEVELS else previous.ai_level
 
-        await self._registry.archive(previous)
-        state = await self._registry.create(
-            mode=new_mode, player_color=new_color, ai_level=new_level
-        )
-        await self._hub.broadcast_status(state)
+        async with self._live_lock:
+            was_live = previous.game_id == self._live_id
+            await self._registry.archive(previous)
+            state = await self._registry.create(
+                mode=new_mode, player_color=new_color, ai_level=new_level
+            )
+            if was_live:
+                self._live_id = state.game_id
+        # 盯着旧局的连接（包括其它浏览器）跟着进入新局
+        await self._hub.migrate(previous.game_id, state)
         return state
 
     # --- 分析 ---
@@ -207,7 +231,11 @@ class GameService:
         return await analyse_position(state.board.fen(), depth or POSITION_DEPTH)
 
     def stats(self) -> dict:
-        return {"registry": self._registry.stats(), "hub": self._hub.stats()}
+        return {
+            "live_game_id": self._live_id or "",
+            "registry": self._registry.stats(),
+            "hub": self._hub.stats(),
+        }
 
 
 _service: Optional[GameService] = None

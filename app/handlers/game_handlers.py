@@ -36,6 +36,18 @@ class GamesHandler(BaseHandler):
         )
 
 
+class CurrentGameHandler(BaseHandler):
+    """GET /api/games/current — 本进程正在进行的那一局（没有则创建）
+
+    任意客户端进入服务时都走这里，因此大家看到并操作的是同一局。
+    """
+
+    async def get(self) -> None:
+        service = get_service()
+        state, _created = await service.current()
+        self.write_json({"success": True, "game_id": state.game_id, **state.snapshot()})
+
+
 class GameStateHandler(BaseHandler):
     """GET /api/games/{game_id} — 单局完整状态"""
 

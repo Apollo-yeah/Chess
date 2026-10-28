@@ -30,8 +30,8 @@ graph LR
 
 * **前后端解耦**：改前端只需重新构建 `web/dist`，完全不碰 Python；Nginx（生产）或 Vite dev
   server（开发）承担同样的静态托管 + 反向代理职责，因此开发与生产的行为一致。
-* **按对局隔离**：每局棋有独立 `game_id`、独立棋盘、独立锁。多个浏览器同时访问互不干扰，
-  一局的请求不会阻塞另一局。`game_id` 存在浏览器 localStorage 中，刷新页面仍是同一局。
+* **当前对局共享**：本进程只有一局正在进行的棋。任何客户端打开页面都会进入这一局，
+  可以一起看、一起走棋；重置后所有连接跟着进入新局。显式指定 `game_id` 的接口仍按局隔离。
 * **引擎不阻塞服务**：Stockfish 进程常驻（固定池大小 + Hash/Threads 配置），所有 UCI 交互
   都通过线程池执行；分析结果按 FEN 缓存，同一局面只算一次并被所有订阅者共享。
 * **两段式实时推送**：走棋后先推状态（微秒级），引擎分析算完再补推 `analysis_update`，
@@ -101,6 +101,26 @@ npm run docker:logs
 npm run docker:down
 ```
 
+### 4. Mac Mini（局域网）
+
+`npm run deploy` 把当前代码同步到 Mac Mini，在远端安装依赖、构建前端，并用本机 Nginx 对外服务。Tornado 只监听 `127.0.0.1:8156`。对局 JSON 与终局 PGN 留在远端，不会被后续同步删掉。
+
+远端需要 Node.js ≥ 18、Python ≥ 3.8、Nginx、Stockfish，例如 `brew install node nginx stockfish`。
+
+```bash
+npm run deploy:doctor   # 检查本机私钥与远端环境
+npm run deploy          # 同步、安装并重启
+# 默认访问 http://192.168.31.66:2100
+```
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `MACMINI_SSH_HOST` | `dipeng-xu@192.168.31.66` | SSH 目标 |
+| `MACMINI_IDENTITY` | `~/.ssh/macmini_dipeng` | 私钥路径 |
+| `MACMINI_REMOTE_PATH` | `~/chess_global` | 远端项目目录 |
+| `MACMINI_PORT` | `2100` | Nginx 对外端口 |
+| `MACMINI_BIND` | `0.0.0.0` | Nginx 监听地址 |
+
 ### 引擎说明
 
 后端按以下顺序自动定位 Stockfish：`STOCKFISH_PATH` 环境变量 → `PATH` 中的 `stockfish`
@@ -122,6 +142,10 @@ npm run docker:down
 | `npm run start` | 构建 + 托管 + 后端（本地生产态） |
 | `npm run test:smoke <api-url> [web-url]` | 端到端验收测试 |
 | `npm run docker:up` / `docker:down` / `docker:logs` | 容器编排 |
+| `npm run deploy` | 同步到 Mac Mini、安装依赖并重启 |
+| `npm run deploy:sync` / `deploy:dry` | 仅同步 / 预览 rsync 变更 |
+| `npm run deploy:restart` / `deploy:status` / `deploy:logs` / `deploy:stop` | 管理已部署服务 |
+| `npm run deploy:doctor` | 检查本机私钥与远端环境 |
 
 ---
 

@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import GameStatusWidget from './GameStatusWidget';
 import { resetGameToServer } from '../utils/apiUtils.js';
-import { loadGameId, saveGameId, ensureSessionGame } from '../utils/gameSession.js';
+import { saveGameId, ensureSessionGame } from '../utils/gameSession.js';
 import './GameContainer.css';
 
-/** 实时分析板块：订阅当前浏览器会话所属的对局 */
+/** 实时分析板块：订阅本进程正在进行的那一局 */
 const GameContainer = () => {
   const gameStatusRef = useRef(null);
   const [notice, setNotice] = useState('');
@@ -14,12 +14,11 @@ const GameContainer = () => {
     setBusy(true);
     setNotice('');
     try {
-      const gameId = loadGameId() || (await ensureSessionGame()).game_id;
+      const gameId = (await ensureSessionGame()).game_id;
       const data = await resetGameToServer(gameId);
       saveGameId(data.game_id);
-      // 分析数据清空并在组件内重连以订阅新对局
       if (gameStatusRef.current) gameStatusRef.current.resetGameData();
-      setNotice(`已重置，新对局 ${String(data.game_id).slice(0, 8)}（刷新页面即可订阅新局）`);
+      setNotice(`已重置，所有打开的客户端都会进入新对局 ${String(data.game_id).slice(0, 8)}`);
     } catch (err) {
       setNotice(`重置失败：${err.message}`);
     } finally {

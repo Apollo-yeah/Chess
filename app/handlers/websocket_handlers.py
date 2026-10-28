@@ -6,6 +6,9 @@
     {"action": "subscribe", "game_id": "x"}  切换订阅另一局
     {"action": "ping"}                       心跳
 
+未携带 ``game_id``（或指定的对局已不存在）时，连接进入**本进程正在进行的那一局**，
+而不是各自新开一局。重置后服务端会把这些连接迁到新局。
+
 服务端消息协议::
 
     {"type": "hello",           "game_id", "adopted", "status"}
@@ -89,14 +92,13 @@ class GameWebSocketHandler(tornado.websocket.WebSocketHandler):
             except GameError:
                 state = None
 
-        adopted = False
+        created = False
         if state is None:
-            # 未指定或指定了不存在的对局：在内存中开一局（首次落子才写盘）
+            # 未指定、或指定了已经不存在的对局：进入本进程正在进行的那一局
             try:
-                state = await service.create(persist=False)
-                adopted = True
+                state, created = await service.current()
             except Exception as exc:  # noqa: BLE001
-                logger.warning("WebSocket 初始化对局失败：%s", exc)
+                logger.warning("WebSocket 加入当前对局失败：%s", exc)
                 self.close(1011, "服务器无法初始化对局")
                 return
 
@@ -106,7 +108,7 @@ class GameWebSocketHandler(tornado.websocket.WebSocketHandler):
             {
                 "type": "hello",
                 "game_id": state.game_id,
-                "adopted": adopted,
+                "adopted": created,
                 "status": state.snapshot(),
                 "version": state.version,
             }

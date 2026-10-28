@@ -28,6 +28,7 @@ from app.handlers.analysis_handlers import (
     HealthHandler,
 )
 from app.handlers.game_handlers import (
+    CurrentGameHandler,
     GameAiMoveHandler,
     GameAnalysisHandler,
     GameModeHandler,
@@ -48,6 +49,8 @@ ROUTES = [
     (r"/api/health", HealthHandler),
     # --- 对局 ---
     (r"/api/games", GamesHandler),
+    # 必须写在 /api/games/{game_id} 之前，否则 "current" 会被当成 game_id
+    (r"/api/games/current", CurrentGameHandler),
     (rf"/api/games/{GAME_ID_PATTERN}", GameStateHandler),
     (rf"/api/games/{GAME_ID_PATTERN}/move", GameMoveHandler),
     (rf"/api/games/{GAME_ID_PATTERN}/ai", GameAiMoveHandler),

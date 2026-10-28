@@ -34,6 +34,7 @@ async function request(method, url, data, config = {}) {
 
 // --- 对局 ---
 export const fetchHistory = () => request('get', '/api/games');
+export const fetchCurrentGame = () => request('get', '/api/games/current');
 export const createGame = (payload = {}) => request('post', '/api/games', payload);
 export const fetchGameState = (gameId) => request('get', `/api/games/${gameId}`);
 export const makeMoveToServer = (gameId, move) =>

@@ -1,9 +1,8 @@
 import {
-    PIECE_IMAGES,
-    PROMOTION_NAMES,
     COL_LABELS,
     ROW_LABELS
 } from '../constants/chess_config.js'
+import PieceView from '../pieces/PieceView.jsx'
 
 import './ChessBox.css'
 
@@ -54,8 +53,6 @@ const ChessBoard = ({
                             const isBlackSquare = (rowIdx + colIdx) % 2 === 1;
                             const isLastMoveFrom = renderedLastMove.from?.row === rowIdx && renderedLastMove.from?.col === colIdx;
                             const isLastMoveTo = renderedLastMove.to?.row === rowIdx && renderedLastMove.to?.col === colIdx;
-                            const pieceName = PROMOTION_NAMES[piece] || piece;
-
                             return (
                                 <div
                                 key={`square-${rowIdx}-${colIdx}`}
@@ -67,14 +64,7 @@ const ChessBoard = ({
                                     ${isLastMoveTo ? 'last-move-to' : ''}`}
                                 onClick={() => onClickEvent(actualRow, actualCol)}
                                 >
-                                {piece && (
-                                    <img
-                                    src={PIECE_IMAGES[piece]}
-                                    alt={pieceName}
-                                    className="piece-image"
-                                    title={pieceName}
-                                    />
-                                )}
+                                {piece && <PieceView piece={piece} />}
                                 </div>
                             );
                         })}

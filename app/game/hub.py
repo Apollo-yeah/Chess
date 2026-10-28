@@ -66,6 +66,25 @@ class GameHub:
                 self.unsubscribe_handler(handler)
         return sent
 
+    async def migrate(self, old_game_id: str, state: GameState) -> int:
+        """把仍盯着旧局的连接改挂到新局，并立刻推送新局面。
+
+        重置会换成新的 ``game_id``。若不迁移，其它客户端会继续停在已经归档的那一局。
+        """
+        group = self._subscribers.pop(old_game_id, set())
+        new_id = state.game_id
+        for handler in list(group):
+            self._handlers[handler] = new_id
+            if hasattr(handler, "game_id"):
+                handler.game_id = new_id
+        if group:
+            self._subscribers[new_id].update(group)
+
+        previous = self._analysis_tasks.pop(old_game_id, None)
+        if previous is not None and not previous.done():
+            previous.cancel()
+        return await self.broadcast_status(state)
+
     async def broadcast_status(self, state: GameState, *, include_analysis: bool = True) -> int:
         payload = {
             "type": "status_update",
