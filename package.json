@@ -1,16 +1,47 @@
 {
   "name": "z-chess",
-  "version": "1.0.0",
-  "description": "A chess application with React frontend and Python Tornado backend",
+  "version": "3.0.0",
+  "description": "Chess AI application — decoupled React SPA + Tornado API + Stockfish engine pool",
   "private": true,
-  "workspaces": [
-    "frontend"
-  ],
+  "type": "module",
   "scripts": {
-    "start": "python ./backend/server.py"
+    "dev": "node scripts/dev.js",
+    "dev:api": "node scripts/api.js",
+    "dev:web": "vite --config web/vite.config.js",
+    "build": "node scripts/build.js",
+    "lint": "eslint web/src",
+    "preview": "vite preview --config web/vite.config.js",
+    "start": "node scripts/start.js",
+    "test:smoke": "python3 scripts/smoke_test.py",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "deploy": "bash scripts/deploy-macmini.sh deploy",
+    "deploy:sync": "bash scripts/deploy-macmini.sh sync",
+    "deploy:restart": "bash scripts/deploy-macmini.sh restart",
+    "deploy:status": "bash scripts/deploy-macmini.sh status",
+    "deploy:logs": "bash scripts/deploy-macmini.sh logs",
+    "deploy:stop": "bash scripts/deploy-macmini.sh stop",
+    "deploy:dry": "bash scripts/deploy-macmini.sh dry",
+    "deploy:doctor": "bash scripts/deploy-macmini.sh doctor",
+    "install:all": "npm install && pip install -r requirements.txt"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "chess.js": "^1.4.0",
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.11.0",
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@vitejs/plugin-react": "^4.3.4",
+    "cross-env": "^7.0.3",
+    "eslint": "^10.0.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "vite": "^6.0.3"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -22,8 +53,7 @@
     "react",
     "tornado",
     "stockfish",
-    "webgame"
+    "vite"
   ],
-  "author": "",
   "license": "MIT"
 }
